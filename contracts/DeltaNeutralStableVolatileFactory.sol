@@ -5,6 +5,8 @@ pragma solidity 0.8.6;
 
 import "./DeltaNeutralStableVolatilePair.sol";
 import "../interfaces/IDeltaNeutralFactory.sol";
+import "../interfaces/IERC20Symbol.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract DeltaNeutralStableVolatileFactory is IDeltaNeutralFactory {
 
@@ -20,18 +22,24 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralFactory {
     address public immutable override weth;
     address public immutable override uniV2Factory;
     address public immutable override uniV2Router;
-    address public override comptroller;
+    address public override immutable comptroller;
+    address payable public override immutable registry;
+    address public override immutable userFeeVeriForwarder;
 
     constructor(
         address weth_,
         address uniV2Factory_,
         address uniV2Router_,
-        address comptroller_
+        address comptroller_,
+        address payable registry_,
+        address userFeeVeriForwarder_
     ) {
         weth = weth_;
         uniV2Factory = uniV2Factory_;
         uniV2Router = uniV2Router_;
         comptroller = comptroller_;
+        registry = registry_;
+        userFeeVeriForwarder = userFeeVeriForwarder_;
     }
 
     // function getPair(address tokenA, address tokenB) external override view returns (address) { TODO
@@ -46,7 +54,7 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralFactory {
         return _allPairs.length;
     }
 
-    function createPair(address tokenA, address tokenB) external override returns (address pair) {
+    function createPair(address tokenA, address tokenB, uint minBps, uint maxBps) external override returns (address pair) {
         require(tokenA != tokenB, 'DNFac: addresses are the same');
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         require(token0 != address(0), 'DNFac: zero address');
@@ -55,7 +63,18 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralFactory {
         // Create the pair
         bytes32 salt = keccak256(abi.encodePacked(token0, token1));
         // TODO: just to get this to compile
-        pair = address(new DeltaNeutralStableVolatilePair{salt: salt}(token0, token1, "Test", "TEST", payable(address(this)), address(this), 0, 0)); // TODO
+        string memory token0Symbol = IERC20Symbol(token0).symbol();
+        string memory token1Symbol = IERC20Symbol(token1).symbol();
+        pair = address(new DeltaNeutralStableVolatilePair{salt: salt}(
+            token0,
+            token1,
+            string(abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)),
+            string(abi.encodePacked("AUTOH-", token0Symbol, "-", token1Symbol)),
+            registry,
+            userFeeVeriForwarder,
+            minBps,
+            maxBps
+        )); // TODO
 
         // Housekeeping
         getPair[token0][token1] = pair;

@@ -10,7 +10,7 @@ interface IDeltaNeutralFactory {
     function allPairs(uint) external view returns (address pair);
     function allPairsLength() external view returns (uint);
 
-    function createPair(address tokenA, address tokenB) external returns (address pair);
+    function createPair(address tokenA, address tokenB, uint minBps, uint maxBps) external returns (address pair);
 
     // function setFeeTo(address) external; TODO
     // function setFeeToSetter(address) external; TODO
@@ -21,4 +21,6 @@ interface IDeltaNeutralFactory {
     function uniV2Router() external view returns (address);
 //    function fuse() external view returns (address); TODO
     function comptroller() external view returns (address);
+    function registry() external view returns (address payable);
+    function userFeeVeriForwarder() external view returns (address);
 }

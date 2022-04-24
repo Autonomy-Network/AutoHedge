@@ -73,10 +73,12 @@ describe('DeltaNeutralStableVolatilePair', function () {
             weth.address,
             UNIV2_FACTORY_ADDR,
             UniswapV2Router02.address,
-            addresses.unitroller
+            addresses.unitroller,
+            "0x0000000000000000000000000000000000000000",
+            "0x0000000000000000000000000000000000000000"
         )
 
-        const tx = await factory.createPair(weth.address, dai.address)
+        const tx = await factory.createPair(weth.address, dai.address, 9900, 10100)
         const receipt = await tx.wait()
 
         const DeltaNeutralStableVolatilePair = await ethers.getContractFactory('DeltaNeutralStableVolatilePair')

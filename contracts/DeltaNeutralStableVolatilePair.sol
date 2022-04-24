@@ -67,7 +67,7 @@ contract DeltaNeutralStableVolatilePair is IDeltaNeutralStableVolatilePair, ERC2
         address payable registry_,
         address userFeeVeriForwarder_,
         uint minBps_,
-        uint mapBps_
+        uint maxBps_
     ) ERC20(name_, symbol_) Ownable() {
         factory = IDeltaNeutralFactory(msg.sender);
         stable = stable_;
@@ -75,7 +75,7 @@ contract DeltaNeutralStableVolatilePair is IDeltaNeutralStableVolatilePair, ERC2
         registry = registry_;
         userFeeVeriForwarder = userFeeVeriForwarder_;
         minBps = minBps_;
-        maxBps = mapBps_;
+        maxBps = maxBps_;
 
         uniLp = IUniswapV2Factory(factory.uniV2Factory()).getPair(stable, vol);
 
@@ -409,78 +409,78 @@ contract DeltaNeutralStableVolatilePair is IDeltaNeutralStableVolatilePair, ERC2
         
     }
 
-    // TODO: need to account for when there isn't enough stablecoins being lent out to repay
-    // TODO: use a constant for the timestamp to reduce gas
-   function rebalance(uint feeAmount) public {
-       (uint ownedAmountVol, uint debtAmountVol, uint debtBps) = getDebtBps();
-       // If there's ETH in this contract, then it's for the purpose of subsidising the
-       // automation fee, and so we don't need to get funds from elsewhere to pay it
-       bool payFeeFromBal = feeAmount >= address(this).balance;
-       address[] memory pathStableToVol = newPath(stable, vol);
-       address[] memory pathVolToStable = newPath(vol, stable);
+//     // TODO: need to account for when there isn't enough stablecoins being lent out to repay
+//     // TODO: use a constant for the timestamp to reduce gas
+//    function rebalance(uint feeAmount) public {
+//        (uint ownedAmountVol, uint debtAmountVol, uint debtBps) = getDebtBps();
+//        // If there's ETH in this contract, then it's for the purpose of subsidising the
+//        // automation fee, and so we don't need to get funds from elsewhere to pay it
+//        bool payFeeFromBal = feeAmount >= address(this).balance;
+//        address[] memory pathStableToVol = newPath(stable, vol);
+//        address[] memory pathVolToStable = newPath(vol, stable);
 
-       if (debtBps >= maxBps) {
-           // Repay some debt
-           uint amountVolToRepay = debtAmountVol - ownedAmountVol;
-           uint[] memory amountsForVol = IUniswapV2Router02(factory.uniV2Router()).getAmountsIn(amountVolToRepay, pathStableToVol);
-           uint amountStableToRedeem = amountsForVol[0];
-           address[] memory pathFee;
+//        if (debtBps >= maxBps) {
+//            // Repay some debt
+//            uint amountVolToRepay = debtAmountVol - ownedAmountVol;
+//            uint[] memory amountsForVol = IUniswapV2Router02(factory.uniV2Router()).getAmountsIn(amountVolToRepay, pathStableToVol);
+//            uint amountStableToRedeem = amountsForVol[0];
+//            address[] memory pathFee;
 
-           if (feeAmount > 0 && !payFeeFromBal) {
-               if (feeAmount > address(this).balance) {
-                   registry.transfer(feeAmount);
-               } else {
-                   pathFee = newPath(stable, IUniswapV2Factory(factory.uniV2Factory()).WETH());
-                   uint[] memory amountsForFee = IUniswapV2Router02(factory.uniV2Router()).getAmountsIn(feeAmount, pathFee);
-                   amountStableToRedeem += amountsForFee[0];
-               }
-           }
+//            if (feeAmount > 0 && !payFeeFromBal) {
+//                if (feeAmount > address(this).balance) {
+//                    registry.transfer(feeAmount);
+//                } else {
+//                    pathFee = newPath(stable, IUniswapV2Factory(factory.uniV2Factory()).WETH());
+//                    uint[] memory amountsForFee = IUniswapV2Router02(factory.uniV2Router()).getAmountsIn(feeAmount, pathFee);
+//                    amountStableToRedeem += amountsForFee[0];
+//                }
+//            }
 
-           ICErc20(cStable).redeem(amountStableToRedeem);
-           approveUnapproved(stable, factory.uniV2Router(), amountStableToRedeem);
-           IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactTokens(amountVolToRepay, amountsForVol[0], pathStableToVol, address(this), block.timestamp);
-           ICErc20(cVol).repayBorrow(amountVolToRepay);
+//            ICErc20(cStable).redeem(amountStableToRedeem);
+//            approveUnapproved(stable, factory.uniV2Router(), amountStableToRedeem);
+//            IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactTokens(amountVolToRepay, amountsForVol[0], pathStableToVol, address(this), block.timestamp);
+//            ICErc20(cVol).repayBorrow(amountVolToRepay);
 
-           if (feeAmount > 0 && !payFeeFromBal) {
-               IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactETH(feeAmount, amountStableToRedeem-amountsForVol[0], pathFee, registry, block.timestamp);
-           }
-       } else if (debtBps <= minBps) {
-           // Borrow more
-           uint amountVolBorrow = ownedAmountVol - debtAmountVol;
-           ICErc20(cVol).borrow(amountVolBorrow);
+//            if (feeAmount > 0 && !payFeeFromBal) {
+//                IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactETH(feeAmount, amountStableToRedeem-amountsForVol[0], pathFee, registry, block.timestamp);
+//            }
+//        } else if (debtBps <= minBps) {
+//            // Borrow more
+//            uint amountVolBorrow = ownedAmountVol - debtAmountVol;
+//            ICErc20(cVol).borrow(amountVolBorrow);
 
-           if (feeAmount > 0 && !payFeeFromBal) {
-               address[] memory pathFee = newPath(vol, IUniswapV2Factory(factory.uniV2Factory()).WETH());
-               uint[] memory amountsVolToEthForFee = IUniswapV2Router02(factory.uniV2Router()).getAmountsIn(feeAmount, pathFee);
+//            if (feeAmount > 0 && !payFeeFromBal) {
+//                address[] memory pathFee = newPath(vol, IUniswapV2Factory(factory.uniV2Factory()).WETH());
+//                uint[] memory amountsVolToEthForFee = IUniswapV2Router02(factory.uniV2Router()).getAmountsIn(feeAmount, pathFee);
 
-               if (amountsVolToEthForFee[0] < amountVolBorrow) {
-                   // Pay the fee
-                   IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactETH(feeAmount, amountsVolToEthForFee[0], pathFee, registry, block.timestamp);
-                   // Swap the rest to stablecoins and lend them out
-                   uint[] memory amountsVolToStable = IUniswapV2Router02(factory.uniV2Router()).swapExactTokensForTokens(amountVolBorrow-amountsVolToEthForFee[0], 1, pathVolToStable, address(this), block.timestamp);
-                   ICErc20(cStable).mint(amountsVolToStable[amountsVolToStable.length-1]);
-               } else if (amountsVolToEthForFee[0] > amountVolBorrow) {
-                   // Get the missing volatile tokens needed for the fee from the lent out stablecoins
-                   uint amountVolNeeded = amountsVolToEthForFee[0] - amountVolBorrow;
-                   uint[] memory amountsStableToVolForFee = IUniswapV2Router02(factory.uniV2Router()).getAmountsIn(amountVolNeeded, pathStableToVol);
-                   ICErc20(cStable).redeem(amountsStableToVolForFee[0]);
-                   IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactTokens(amountVolNeeded, amountsStableToVolForFee[0], pathStableToVol, address(this), block.timestamp);
-                   IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactETH(feeAmount, amountsVolToEthForFee[0], pathFee, registry, block.timestamp);
-               } else {
-                   IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactETH(feeAmount, amountVolBorrow, pathFee, registry, block.timestamp);
-               }
-           }
-       } else {
-           require(false, "DNPair: debt within range");
-       }
+//                if (amountsVolToEthForFee[0] < amountVolBorrow) {
+//                    // Pay the fee
+//                    IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactETH(feeAmount, amountsVolToEthForFee[0], pathFee, registry, block.timestamp);
+//                    // Swap the rest to stablecoins and lend them out
+//                    uint[] memory amountsVolToStable = IUniswapV2Router02(factory.uniV2Router()).swapExactTokensForTokens(amountVolBorrow-amountsVolToEthForFee[0], 1, pathVolToStable, address(this), block.timestamp);
+//                    ICErc20(cStable).mint(amountsVolToStable[amountsVolToStable.length-1]);
+//                } else if (amountsVolToEthForFee[0] > amountVolBorrow) {
+//                    // Get the missing volatile tokens needed for the fee from the lent out stablecoins
+//                    uint amountVolNeeded = amountsVolToEthForFee[0] - amountVolBorrow;
+//                    uint[] memory amountsStableToVolForFee = IUniswapV2Router02(factory.uniV2Router()).getAmountsIn(amountVolNeeded, pathStableToVol);
+//                    ICErc20(cStable).redeem(amountsStableToVolForFee[0]);
+//                    IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactTokens(amountVolNeeded, amountsStableToVolForFee[0], pathStableToVol, address(this), block.timestamp);
+//                    IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactETH(feeAmount, amountsVolToEthForFee[0], pathFee, registry, block.timestamp);
+//                } else {
+//                    IUniswapV2Router02(factory.uniV2Router()).swapTokensForExactETH(feeAmount, amountVolBorrow, pathFee, registry, block.timestamp);
+//                }
+//            }
+//        } else {
+//            require(false, "DNPair: debt within range");
+//        }
 
-       if (payFeeFromBal) {
-           registry.transfer(feeAmount);
-       }
+//        if (payFeeFromBal) {
+//            registry.transfer(feeAmount);
+//        }
 
-       (ownedAmountVol, debtAmountVol, debtBps) = getDebtBps();
-       require(debtBps >= minBps && debtBps <= maxBps, "DNPair: debt not within range");
-   }
+//        (ownedAmountVol, debtAmountVol, debtBps) = getDebtBps();
+//        require(debtBps >= minBps && debtBps <= maxBps, "DNPair: debt not within range");
+//    }
 
     // TODO: mark as view, issue with balanceOfUnderlying not being view
     function getDebtBps() public override returns (uint ownedAmountVol, uint debtAmountVol, uint debtBps) {
