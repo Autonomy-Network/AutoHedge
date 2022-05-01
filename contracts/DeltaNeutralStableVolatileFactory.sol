@@ -1,45 +1,43 @@
 pragma solidity 0.8.6;
 
-// TODO License
-// SPDX-License-Identifier: UNLICENSED
 
 import "./DeltaNeutralStableVolatilePair.sol";
-import "../interfaces/IDeltaNeutralFactory.sol";
+import "../interfaces/IDeltaNeutralStableVolatileFactory.sol";
 import "../interfaces/IERC20Symbol.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "../interfaces/IUniswapV2Factory.sol";
+import "../interfaces/IUniswapV2Router02.sol";
+import "../interfaces/IComptroller.sol";
 
-contract DeltaNeutralStableVolatileFactory is IDeltaNeutralFactory {
+
+contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory {
 
 //    address constant _ETH_ADDRESS_ = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE; TODO
 
-    // Keep track of stablecoins so we can use a delta-neutral pool that only hedges the
-    // other asset when paired with a known stablecoin
-    mapping(address => bool) public stablecoins;
-    mapping(address => mapping(address => address)) public override getPair;
+    mapping(IERC20 => mapping(IERC20 => address)) public override getPair;
     address[] private _allPairs;
 
-    uint256 public constant override MAX_UINT = type(uint256).max;
-    address public immutable override weth;
-    address public immutable override uniV2Factory;
-    address public immutable override uniV2Router;
-    address public override immutable comptroller;
-    address payable public override immutable registry;
-    address public override immutable userFeeVeriForwarder;
+    IUniswapV2Factory public override uniV2Factory;
+    IUniswapV2Router02 public override uniV2Router;
+    IComptroller public comptroller;
+    address payable public override registry;
+    address public override userFeeVeriForwarder;
+    DeltaNeutralStableVolatilePair.MmBps initMmBps;
 
     constructor(
         address weth_,
-        address uniV2Factory_,
-        address uniV2Router_,
-        address comptroller_,
+        IUniswapV2Factory uniV2Factory_,
+        IUniswapV2Router02 uniV2Router_,
+        IComptroller comptroller_,
         address payable registry_,
-        address userFeeVeriForwarder_
+        address userFeeVeriForwarder_,
+        DeltaNeutralStableVolatilePair.MmBps memory initMmBps_
     ) {
-        weth = weth_;
         uniV2Factory = uniV2Factory_;
         uniV2Router = uniV2Router_;
         comptroller = comptroller_;
         registry = registry_;
         userFeeVeriForwarder = userFeeVeriForwarder_;
+        initMmBps = initMmBps_;
     }
 
     // function getPair(address tokenA, address tokenB) external override view returns (address) { TODO
@@ -54,42 +52,33 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralFactory {
         return _allPairs.length;
     }
 
-    function createPair(address tokenA, address tokenB, uint minBps, uint maxBps) external override returns (address pair) {
-        require(tokenA != tokenB, 'DNFac: addresses are the same');
-        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
-        require(token0 != address(0), 'DNFac: zero address');
-        require(getPair[token0][token1] == address(0), 'DNFac: pair exists'); // single check is sufficient
+    function createPair(IERC20 stable, IERC20 vol) external override returns (address pair) {
+        require(stable != vol, 'DNFac: addresses are the same');
+        require(stable != IERC20(address(0)), 'DNFac: zero address');
+        require(vol != IERC20(address(0)), 'DNFac: zero address');
+        require(getPair[stable][vol] == address(0), 'DNFac: pair exists'); // single check is sufficient
 
         // Create the pair
-        bytes32 salt = keccak256(abi.encodePacked(token0, token1));
+        bytes32 salt = keccak256(abi.encodePacked(stable, vol));
         // TODO: just to get this to compile
-        string memory token0Symbol = IERC20Symbol(token0).symbol();
-        string memory token1Symbol = IERC20Symbol(token1).symbol();
+        string memory token0Symbol = IERC20Symbol(address(stable)).symbol();
+        string memory token1Symbol = IERC20Symbol(address(vol)).symbol();
         pair = address(new DeltaNeutralStableVolatilePair{salt: salt}(
-            token0,
-            token1,
+            uniV2Factory,
+            uniV2Router,
+            stable,
+            vol,
             string(abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)),
             string(abi.encodePacked("AUTOH-", token0Symbol, "-", token1Symbol)),
             registry,
             userFeeVeriForwarder,
-            minBps,
-            maxBps
-        )); // TODO
+            initMmBps,
+            comptroller
+        ));
 
         // Housekeeping
-        getPair[token0][token1] = pair;
-        getPair[token1][token0] = pair; // populate mapping in the reverse direction
+        getPair[stable][vol] = pair;
         _allPairs.push(pair);
-        emit PairCreated(token0, token1, pair, _allPairs.length);
+        emit PairCreated(stable, vol, pair, _allPairs.length);
     }
-
-    // function setFeeTo(address _feeTo) external { TODO
-    //     require(msg.sender == feeToSetter, 'UniswapV2: FORBIDDEN');
-    //     feeTo = _feeTo;
-    // }
-
-    // function setFeeToSetter(address _feeToSetter) external { TODO
-    //     require(msg.sender == feeToSetter, 'UniswapV2: FORBIDDEN');
-    //     feeToSetter = _feeToSetter;
-    // }
 }

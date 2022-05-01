@@ -1,6 +1,9 @@
 pragma solidity 0.8.6;
 
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+
 interface IDeltaNeutralStableVolatilePair {
 
     struct Amounts {
@@ -16,6 +19,11 @@ interface IDeltaNeutralStableVolatilePair {
         uint swapAmountOutMin;
     }
 
+    struct MmBps {
+        uint16 min;
+        uint16 max;
+    }
+
     function deposit(
         uint amountStableDesired,
         uint amountVolDesired,
@@ -28,9 +36,6 @@ interface IDeltaNeutralStableVolatilePair {
         UniArgs calldata uniArgs
     ) external;
 
-    // TODO return token addresses
-    function getReserves(uint amountStable, uint amountVol, uint amountUniLp) external returns (uint, uint, uint);
-
     function rebalanceAuto(
         address user,
         uint feeAmount,
@@ -39,9 +44,5 @@ interface IDeltaNeutralStableVolatilePair {
 
     function getDebtBps() external returns (uint ownedAmountVol, uint debtAmountVol, uint debtBps);
 
-    function setMinBps(uint newMinBps) external;
-
-    function setMaxBps(uint newMaxBps) external;
-
-    function newPath(address src, address dest) external pure returns (address[] memory);
+    function setMmBps(MmBps calldata newMmBps) external;
 }

@@ -1,10 +1,3 @@
-// We require the Hardhat Runtime Environment explicitly here. This is optional
-// but useful for running the script in a standalone fashion through `node <script>`.
-//
-// When running the script with `npx hardhat run <script>` you'll find the Hardhat
-// Runtime Environment's members available in the global scope.
-// noinspection JSUnresolvedFunction,JSUnresolvedVariable
-
 const hre = require('hardhat')
 const fs = require('fs');
 
@@ -25,6 +18,7 @@ const MasterPriceOracle = require('../thirdparty/MasterPriceOracle.json')
 const FusePoolDirectory = require('../thirdparty/FusePoolDirectory.json')
 const FusePoolLens = require('../thirdparty/FusePoolLens.json')
 const Unitroller = require('../thirdparty/Unitroller.json')
+const FuseFeeDistributor = require('../thirdparty/FuseFeeDistributor.json')
 
 const ICErc20 = require('../artifacts/interfaces/ICErc20.sol/ICErc20.json')
 
@@ -152,7 +146,7 @@ async function deployMarkets() {
         ]),
         collateralFactorMantissa
     )
-
+    
     const assets = await fuseLens.getPoolAssetsWithData(unitroller.address)
     expect(assets[0]['underlyingSymbol']).to.equal('DAI-WETH')
     expect(assets[1]['underlyingSymbol']).to.equal('DAI')
@@ -170,7 +164,7 @@ async function setupFunds() {
     expect(await weth.balanceOf(alice.address)).to.equal(amount)
 
     // get dai
-    amount = parseEther('100000')
+    amount = parseEther('1000000')
     let daiWhale = '0xe78388b4ce79068e89bf8aa7f218ef6b9ab0e9d0'
     await hre.network.provider.request({
         method: 'hardhat_impersonateAccount',
@@ -183,7 +177,7 @@ async function setupFunds() {
     expect(await dai.balanceOf(owner.address)).to.equal(amount)
     expect(await dai.balanceOf(bob.address)).to.equal(amount)
     expect(await dai.balanceOf(alice.address)).to.equal(amount)
-
+    
     // deposit volatile to fuse
     amount = parseEther('1000')
     await weth.approve(cVol.address, amount)
@@ -192,54 +186,60 @@ async function setupFunds() {
 }
 
 async function main() {
-    // Hardhat always runs the compile task when running scripts with its command
-    // line interface.
-    //
-    // If this script is run directly using `node` you may want to call compile
-    // manually to make sure everything is compiled
-    // await hre.run('compile')
-
     [owner, bob, alice] = await ethers.getSigners()
+    
+    let fuseAdminAddr = '0x5eA4A9a7592683bF0Bc187d6Da706c6c4770976F'
+    await owner.sendTransaction({
+        to: fuseAdminAddr,
+        value: parseEther("1"),
+    })
+    await hre.network.provider.request({
+        method: 'hardhat_impersonateAccount',
+        params: [fuseAdminAddr],
+    })
+    fuseAdmin = await ethers.provider.getSigner(fuseAdminAddr)
+    fuseFeeDistributor = new ethers.Contract(FuseFeeDistributor.address, FuseFeeDistributor.abi, fuseAdmin)
+    await fuseFeeDistributor._setPoolLimits(parseEther('1'), ethers.BigNumber.from("115792089237316195423570985008687907853269984665640564039457584007913129639935"), 1)
 
     ethPrice = await getEthPrice()
     expect(ethPrice).to.be.greaterThan(0)
-
+    
     weth = c(WETH)
     dai = c(DAI)
-
+    
     uniRouter = c(UniswapV2Router02)
-
+    
     fuseClones = c(InitializableClones)
     fuse = c(FusePoolDirectory)
     fuseLens = c(FusePoolLens)
-
+    
     await deployMasterPriceOracle()
     await deployPool()
     await deployMarkets()
-
+    
     uniLp = new ethers.Contract(UNIV2_DAI_ETH_LP_ADDR, WETH.abi, owner)
     cVol = new ethers.Contract(await unitroller.cTokensByUnderlying(weth.address), ICErc20.abi, owner)
     cStable = new ethers.Contract(await unitroller.cTokensByUnderlying(dai.address), ICErc20.abi, owner)
     cUniLp = new ethers.Contract(await unitroller.cTokensByUnderlying(uniLp.address), ICErc20.abi, owner)
-
+    
     await unitroller.enterMarkets([
         cStable.address,
         cVol.address,
         cUniLp.address
     ])
-
+    
     await setupFunds()
-
+    
     const snapshotId = await network.provider.request({
         method: 'evm_snapshot'
     })
-
+    
     const addresses = {
         snapshotId,
         unitroller: unitroller.address,
     }
     fs.writeFileSync('addresses.json', JSON.stringify(addresses))
-
+    
     console.log('addresses', addresses)
 }
 
