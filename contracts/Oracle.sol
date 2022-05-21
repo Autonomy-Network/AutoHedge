@@ -5,6 +5,6 @@ pragma solidity 0.8.6;
 
 contract Oracle {
     function getUnderlyingPrice(address cToken) external view returns (uint) {
-        return 3760000000000000000;
+        return 2916000000000000000;
     }
 }

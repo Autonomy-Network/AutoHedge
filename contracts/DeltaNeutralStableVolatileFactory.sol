@@ -1,37 +1,46 @@
 pragma solidity 0.8.6;
 
 
-import "./DeltaNeutralStableVolatilePair.sol";
 import "../interfaces/IDeltaNeutralStableVolatileFactory.sol";
+import "../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
 import "../interfaces/IERC20Symbol.sol";
 import "../interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IComptroller.sol";
+import "./TProxy.sol";
 
 
 contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory {
 
 //    address constant _ETH_ADDRESS_ = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE; TODO
 
-    mapping(IERC20 => mapping(IERC20 => address)) public override getPair;
+    mapping(IERC20Metadata => mapping(IERC20Metadata => address)) public override getPair;
     address[] private _allPairs;
 
+    address public logic;
+    address public admin;
+    address public weth;
     IUniswapV2Factory public override uniV2Factory;
     IUniswapV2Router02 public override uniV2Router;
     IComptroller public comptroller;
     address payable public override registry;
     address public override userFeeVeriForwarder;
-    DeltaNeutralStableVolatilePair.MmBps initMmBps;
+    IDeltaNeutralStableVolatilePairUpgradeable.MmBps initMmBps;
 
     constructor(
+        address logic_,
+        address admin_,
         address weth_,
         IUniswapV2Factory uniV2Factory_,
         IUniswapV2Router02 uniV2Router_,
         IComptroller comptroller_,
         address payable registry_,
         address userFeeVeriForwarder_,
-        DeltaNeutralStableVolatilePair.MmBps memory initMmBps_
+        IDeltaNeutralStableVolatilePairUpgradeable.MmBps memory initMmBps_
     ) {
+        logic = logic_;
+        admin = admin_;
+        weth = weth_;
         uniV2Factory = uniV2Factory_;
         uniV2Router = uniV2Router_;
         comptroller = comptroller_;
@@ -39,6 +48,19 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         userFeeVeriForwarder = userFeeVeriForwarder_;
         initMmBps = initMmBps_;
     }
+
+
+
+
+
+    // TODO: add setters for the implementation
+    // Add logic and admin vars to the interface
+
+
+
+
+
+
 
     // function getPair(address tokenA, address tokenB) external override view returns (address) { TODO
     //     return getPair[tokenA][tokenB];
@@ -52,10 +74,10 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         return _allPairs.length;
     }
 
-    function createPair(IERC20 stable, IERC20 vol) external override returns (address pair) {
+    function createPair(IERC20Metadata stable, IERC20Metadata vol) external override returns (address pair) {
         require(stable != vol, 'DNFac: addresses are the same');
-        require(stable != IERC20(address(0)), 'DNFac: zero address');
-        require(vol != IERC20(address(0)), 'DNFac: zero address');
+        require(stable != IERC20Metadata(address(0)), 'DNFac: zero address');
+        require(vol != IERC20Metadata(address(0)), 'DNFac: zero address');
         require(getPair[stable][vol] == address(0), 'DNFac: pair exists'); // single check is sufficient
 
         // Create the pair
@@ -63,20 +85,54 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         // TODO: just to get this to compile
         string memory token0Symbol = IERC20Symbol(address(stable)).symbol();
         string memory token1Symbol = IERC20Symbol(address(vol)).symbol();
-        pair = address(new DeltaNeutralStableVolatilePair{salt: salt}(
-            uniV2Factory,
-            uniV2Router,
+
+        IComptroller _comptroller = comptroller; // Gas savings
+        address uniLp = uniV2Factory.getPair(address(stable), address(vol));
+        IDeltaNeutralStableVolatilePairUpgradeable.Tokens memory tokens = IDeltaNeutralStableVolatilePairUpgradeable.Tokens(
             stable,
+            ICErc20(_comptroller.cTokensByUnderlying(address(stable))),
             vol,
-            string(abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)),
-            string(abi.encodePacked("AUTOH-", token0Symbol, "-", token1Symbol)),
-            registry,
-            userFeeVeriForwarder,
-            initMmBps,
-            comptroller
+            ICErc20(_comptroller.cTokensByUnderlying(address(vol))),
+            IERC20Metadata(uniLp),
+            ICErc20(_comptroller.cTokensByUnderlying(address(uniLp)))
+        );
+
+		pair = address(new TProxy(
+            logic,
+            admin,
+            abi.encodeWithSelector(
+                IDeltaNeutralStableVolatilePairUpgradeable.initialize.selector,
+                uniV2Router,
+                tokens,
+                weth,
+                string(abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)),
+                string(abi.encodePacked("AH-", token0Symbol, "-", token1Symbol)),
+                registry,
+                userFeeVeriForwarder,
+                initMmBps,
+                comptroller
+            )
         ));
+        // pair = address(new DeltaNeutralStableVolatilePair{salt: salt}(
+        //     uniV2Factory,
+        //     uniV2Router,
+        //     stable,
+        //     vol,
+        //     string(abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)),
+        //     string(abi.encodePacked("AUTOH-", token0Symbol, "-", token1Symbol)),
+        //     registry,
+        //     userFeeVeriForwarder,
+        //     initMmBps,
+        //     comptroller
+        // ));
 
         // Housekeeping
+        // Don't want to save the reverse ordering because we don't want to sort the
+        // tokens. The tokens need to be inputed into `createPair` in the correct
+        // order and the contract has no way of knowing which token is a stable or
+        // volatile token, and we don't want someone to maliciously create new pairs
+        // with them the wrong way round and therefore prevent them being created correctly
+        // in the future if each pair is saved in both orders in `getPair`
         getPair[stable][vol] = pair;
         _allPairs.push(pair);
         emit PairCreated(stable, vol, pair, _allPairs.length);

@@ -3,6 +3,7 @@ require("@nomiclabs/hardhat-ganache");
 require("@tenderly/hardhat-tenderly");
 require('dotenv').config()
 require("@nomiclabs/hardhat-etherscan");
+require('hardhat-contract-sizer');
 
 
 // This is a sample Hardhat task. To learn how to create your own go to
@@ -27,7 +28,7 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 100 // TODO
+        runs: 200 // TODO
       }
     }
   },

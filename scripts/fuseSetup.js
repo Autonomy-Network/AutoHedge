@@ -22,7 +22,7 @@ const FuseFeeDistributor = require('../thirdparty/FuseFeeDistributor.json')
 
 const ICErc20 = require('../artifacts/interfaces/ICErc20.sol/ICErc20.json')
 
-const UNIV2_DAI_ETH_LP_ADDR = '0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11'
+const UNIV2_DAI_ETH_ADDR = '0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11'
 
 const FUSE_DEFAULT_ORACLE_ADDR = '0x1887118E49e0F4A78Bd71B792a49dE03504A764D'
 const COMPTROLLER_IMPL_ADDR = '0xe16db319d9da7ce40b666dd2e365a4b8b3c18217'
@@ -100,11 +100,11 @@ async function deployMarkets() {
         'uint256',
     ]
     const oracle = await (await ethers.getContractFactory('Oracle')).deploy() // TODO
-    await masterPriceOracle.add([UNIV2_DAI_ETH_LP_ADDR], [oracle.address])
+    await masterPriceOracle.add([UNIV2_DAI_ETH_ADDR], [oracle.address])
     await unitroller._deployMarket(
         false,
         ethers.utils.defaultAbiCoder.encode(constructorTypes, [
-            UNIV2_DAI_ETH_LP_ADDR,
+            UNIV2_DAI_ETH_ADDR,
             unitroller.address,
             JUMP_RATE_MODEL_UNI_ADDR,
             'UniV2 DAI ETH LP', // TODO
@@ -157,11 +157,11 @@ async function setupFunds() {
     // get weth
     let amount = parseEther('2000')
     await weth.deposit({value: amount})
-    await weth.connect(bob).deposit({value: amount})
     await weth.connect(alice).deposit({value: amount})
+    await weth.connect(bob).deposit({value: amount})
     expect(await weth.balanceOf(owner.address)).to.equal(amount)
-    expect(await weth.balanceOf(bob.address)).to.equal(amount)
     expect(await weth.balanceOf(alice.address)).to.equal(amount)
+    expect(await weth.balanceOf(bob.address)).to.equal(amount)
 
     // get dai
     amount = parseEther('1000000')
@@ -172,11 +172,11 @@ async function setupFunds() {
     })
     daiWhale = await ethers.provider.getSigner(daiWhale)
     await dai.connect(daiWhale).transfer(owner.address, amount)
-    await dai.connect(daiWhale).transfer(bob.address, amount)
     await dai.connect(daiWhale).transfer(alice.address, amount)
+    await dai.connect(daiWhale).transfer(bob.address, amount)
     expect(await dai.balanceOf(owner.address)).to.equal(amount)
-    expect(await dai.balanceOf(bob.address)).to.equal(amount)
     expect(await dai.balanceOf(alice.address)).to.equal(amount)
+    expect(await dai.balanceOf(bob.address)).to.equal(amount)
     
     // deposit volatile to fuse
     amount = parseEther('1000')
@@ -217,7 +217,7 @@ async function main() {
     await deployPool()
     await deployMarkets()
     
-    uniLp = new ethers.Contract(UNIV2_DAI_ETH_LP_ADDR, WETH.abi, owner)
+    uniLp = new ethers.Contract(UNIV2_DAI_ETH_ADDR, WETH.abi, owner)
     cVol = new ethers.Contract(await unitroller.cTokensByUnderlying(weth.address), ICErc20.abi, owner)
     cStable = new ethers.Contract(await unitroller.cTokensByUnderlying(dai.address), ICErc20.abi, owner)
     cUniLp = new ethers.Contract(await unitroller.cTokensByUnderlying(uniLp.address), ICErc20.abi, owner)

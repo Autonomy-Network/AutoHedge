@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.5.0",
+    "@openzeppelin/contracts-upgradeable": "^4.5.2",
     "axios": "^0.26.1",
-    "dotenv": "^16.0.0"
+    "dotenv": "^16.0.0",
+    "hardhat-contract-sizer": "^2.5.1"
   }
 }

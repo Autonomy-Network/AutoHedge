@@ -1,7 +1,10 @@
 pragma solidity 0.8.6;
 
 
-contract UniswapV2ERC20 {
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+
+
+contract UniswapV2ERC20Upgradeable is Initializable {
     string public name;
     string public symbol;
     uint8 public constant decimals = 18;
@@ -17,7 +20,12 @@ contract UniswapV2ERC20 {
     event Approval(address indexed owner, address indexed spender, uint value);
     event Transfer(address indexed from, address indexed to, uint value);
 
-    constructor(string memory name_, string memory symbol_) {
+
+    function __UniswapV2ERC20Upgradeable__init(string memory name_, string memory symbol_) public virtual onlyInitializing {
+        __UniswapV2ERC20Upgradeable__init_unchained(name_, symbol_);
+    }
+
+    function __UniswapV2ERC20Upgradeable__init_unchained(string memory name_, string memory symbol_) internal onlyInitializing {
         name = name_;
         symbol = symbol;
         DOMAIN_SEPARATOR = keccak256(
