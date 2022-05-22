@@ -13,9 +13,9 @@ function getAddresses () {
     return JSON.parse(fs.readFileSync('addresses.json'));
 }
 
-const RES_TOL_LOWER = 9990
-const RES_TOL_UPPER = 10010
-const RES_TOL_TOTAL = 10000
+const RES_TOL_LOWER = 999990
+const RES_TOL_UPPER = 1000010
+const RES_TOL_TOTAL = 1000000
 
 function equalTol(a, b) {
     expect(a).gt(b.mul(RES_TOL_LOWER).div(RES_TOL_TOTAL))

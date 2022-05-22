@@ -25,8 +25,8 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
     }
 
     struct MmBps {
-        uint16 min;
-        uint16 max;
+        uint64 min;
+        uint64 max;
     }
 
     struct Tokens {

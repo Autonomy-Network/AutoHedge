@@ -53,6 +53,8 @@ let cVol
 let cStable
 let cUniLp
 
+let reg
+
 const c = (artifact) => new ethers.Contract(artifact.address, artifact.abi, owner)
 
 async function deployMasterPriceOracle() {
@@ -99,8 +101,8 @@ async function deployMarkets() {
         'uint256',
         'uint256',
     ]
-    const oracle = await (await ethers.getContractFactory('Oracle')).deploy() // TODO
-    await masterPriceOracle.add([UNIV2_DAI_ETH_ADDR], [oracle.address])
+    const fuseOracle = await (await ethers.getContractFactory('FuseOracle')).deploy() // TODO
+    await masterPriceOracle.add([UNIV2_DAI_ETH_ADDR], [fuseOracle.address])
     await unitroller._deployMarket(
         false,
         ethers.utils.defaultAbiCoder.encode(constructorTypes, [
@@ -185,6 +187,30 @@ async function setupFunds() {
     expect(await cVol.callStatic.balanceOfUnderlying(owner.address)).to.equal(amount)
 }
 
+async function deployAutonomy() {
+    const po = await (await ethers.getContractFactory('PriceOracle')).deploy(parseEther('2000'), ethers.BigNumber.from(5000000000))
+    const o = await (await ethers.getContractFactory('Oracle')).deploy(po.address, false)
+    const sm = await (await ethers.getContractFactory('StakeManager')).deploy(o.address)
+    const uf = await (await ethers.getContractFactory('Forwarder')).deploy()
+    const ff = await (await ethers.getContractFactory('Forwarder')).deploy()
+    const uff = await (await ethers.getContractFactory('Forwarder')).deploy()
+    const reg = await (await ethers.getContractFactory('Registry')).deploy(
+        sm.address,
+        o.address,
+        uf.address,
+        ff.address,
+        uff.address,
+        "Autonomy Network",
+        "AUTO",
+        parseEther('1000000000')
+    )
+    await uf.setCaller(reg.address, true)
+    await ff.setCaller(reg.address, true)
+    await uff.setCaller(reg.address, true)
+    
+    return reg
+}
+
 async function main() {
     [owner, bob, alice] = await ethers.getSigners()
     
@@ -212,7 +238,6 @@ async function main() {
     fuseClones = c(InitializableClones)
     fuse = c(FusePoolDirectory)
     fuseLens = c(FusePoolLens)
-    
     await deployMasterPriceOracle()
     await deployPool()
     await deployMarkets()
@@ -229,6 +254,8 @@ async function main() {
     ])
     
     await setupFunds()
+
+    const reg = await deployAutonomy()
     
     const snapshotId = await network.provider.request({
         method: 'evm_snapshot'
@@ -237,6 +264,7 @@ async function main() {
     const addresses = {
         snapshotId,
         unitroller: unitroller.address,
+        reg: reg.address,
     }
     fs.writeFileSync('addresses.json', JSON.stringify(addresses))
     

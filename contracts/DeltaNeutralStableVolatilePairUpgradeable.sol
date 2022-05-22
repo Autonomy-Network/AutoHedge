@@ -65,7 +65,6 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
     using SafeERC20 for IERC20Metadata;
 
     uint private constant MINIMUM_LIQUIDITY = 10**3;
-    uint private constant FULL_BPS = 10000;
     uint private constant BASE_FACTOR = 1e18;
     uint private constant MAX_UINT = type(uint256).max;
 
@@ -343,10 +342,14 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         require(msg.sender == userFeeVeriForwarder, "LimitsStops: not userFeeForw");
     }
 
+    function rebalance() public nonReentrant {
+        _rebalance(0);
+    }
+
     // TODO: need to account for when there isn't enough stablecoins being lent out to repay
     // TODO: use a constant for the timestamp to reduce gas
     // TODO: add flash-loan protection
-    function rebalance(uint feeAmount) public nonReentrant {
+    function _rebalance(uint feeAmount) private {
         Tokens memory _tokens = tokens; // Gas savings
         (uint amountVolOwned, uint amountVolDebt, uint debtBps) = _getDebtBps(_tokens);
         // If there's ETH in this contract, then it's for the purpose of subsidising the
@@ -355,6 +358,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         address[] memory pathStableToVol = newPath(_tokens.stable, _tokens.vol);
         address[] memory pathVolToStable = newPath(_tokens.vol, _tokens.stable);
         MmBps memory mb = mmBps;
+
 
         if (debtBps >= mb.max) {
             // Repay some debt
@@ -450,8 +454,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
     // TODO: mark as view, issue with balanceOfUnderlying not being view
     function _getDebtBps(Tokens memory _tokens) private returns (uint amountVolOwned, uint amountVolDebt, uint debtBps) {
         amountVolOwned = _tokens.vol.balanceOf(address(_tokens.uniLp)) * _tokens.cUniLp.balanceOfUnderlying(address(this)) / _tokens.uniLp.totalSupply();
-        amountVolDebt = _tokens.cVol.balanceOfUnderlying(address(this));
-        debtBps = amountVolDebt * FULL_BPS / amountVolOwned;
+        amountVolDebt = _tokens.cVol.borrowBalanceCurrent(address(this));
+        debtBps = amountVolDebt * BASE_FACTOR / amountVolOwned;
     }
 
     // TODO: add owner

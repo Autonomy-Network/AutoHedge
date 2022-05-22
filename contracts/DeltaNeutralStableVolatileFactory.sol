@@ -9,6 +9,8 @@ import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IComptroller.sol";
 import "./TProxy.sol";
 
+import "hardhat/console.sol";
+
 
 contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory {
 
@@ -97,21 +99,24 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
             ICErc20(_comptroller.cTokensByUnderlying(address(uniLp)))
         );
 
+
+        bytes memory data = abi.encodeWithSelector(
+            IDeltaNeutralStableVolatilePairUpgradeable.initialize.selector,
+            uniV2Router,
+            tokens,
+            weth,
+            string(abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)),
+            string(abi.encodePacked("AH-", token0Symbol, "-", token1Symbol)),
+            registry,
+            userFeeVeriForwarder,
+            initMmBps,
+            comptroller
+        );
+        console.log(string(data));
 		pair = address(new TProxy(
             logic,
             admin,
-            abi.encodeWithSelector(
-                IDeltaNeutralStableVolatilePairUpgradeable.initialize.selector,
-                uniV2Router,
-                tokens,
-                weth,
-                string(abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)),
-                string(abi.encodePacked("AH-", token0Symbol, "-", token1Symbol)),
-                registry,
-                userFeeVeriForwarder,
-                initMmBps,
-                comptroller
-            )
+            data
         ));
         // pair = address(new DeltaNeutralStableVolatilePair{salt: salt}(
         //     uniV2Factory,
