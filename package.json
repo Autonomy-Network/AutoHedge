@@ -3,6 +3,9 @@
   "scripts": {
     "tc:tp": "typechain 'thirdparty/*.json' --target ethers-v5 --out-dir typechain/thirdparty",
     "build": "hardhat compile && npm run tc:tp",
+    "fork": "hardhat node --fork",
+    "fuse": "hardhat run scripts/fuseSetup.ts --network local",
+    "test": "hardhat test --network local",
     "postinstall": "npm run build"
   },
   "devDependencies": {

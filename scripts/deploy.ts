@@ -8,7 +8,7 @@
 import hre, { ethers } from "hardhat"
 import fs from "fs"
 import { expect } from "chai"
-import { getEthPrice } from "./utils"
+import { getEthPrice, getAddresses } from "./utils"
 import WETH from "thirdparty/WETH.json"
 import DAI from "thirdparty/DAI.json"
 import UniswapV2Router02 from "thirdparty/UniswapV2Router02.json"
@@ -35,12 +35,18 @@ let owner
 
 async function main() {
   ;[owner] = await ethers.getSigners()
+  const addresses = getAddresses()
 
-  const TProxyAdminFactory = await ethers.getContractFactory()
+  const TProxyAdminFactory = await ethers.getContractFactory("TProxyAdmin")
+  const DeltaNeutralStableVolatilePairUpgradeable =
+    await ethers.getContractFactory("DeltaNeutralStableVolatilePairUpgradeable")
+  const DeltaNeutralStableVolatileFactory = await ethers.getContractFactory(
+    "DeltaNeutralStableVolatileFactory"
+  )
 
-  admin = await TProxyAdmin.deploy()
-  pairImpl = await DeltaNeutralStableVolatilePairUpgradeable.deploy()
-  factory = await DeltaNeutralStableVolatileFactory.deploy(
+  const admin = await TProxyAdminFactory.deploy()
+  const pairImpl = await DeltaNeutralStableVolatilePairUpgradeable.deploy()
+  const factory = await DeltaNeutralStableVolatileFactory.deploy(
     pairImpl.address,
     admin.address,
     WETH_ADDR,
@@ -53,6 +59,7 @@ async function main() {
   )
 
   const tx = await factory.createPair(DAI_ADDR, WETH_ADDR)
+  const receipt = await tx.wait()
   console.log(receipt.events)
 }
 

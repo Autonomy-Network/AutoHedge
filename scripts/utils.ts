@@ -1,10 +1,23 @@
 import fs from "fs"
 import axios from "axios"
 import { expect } from "chai"
-import { BigNumber } from "ethers"
+import { BigNumber, ContractInterface } from "ethers"
 import { network } from "hardhat"
 
-export function getAddresses() {
+export const noDeadline = Math.floor(Date.now() / 1000) * 2
+
+export type ArtifactType = {
+  address: string
+  abi: ContractInterface
+}
+
+export type UnitrollerSnapshot = {
+  snapshotId: string
+  unitroller: string
+  reg: string
+}
+
+export function getAddresses(): UnitrollerSnapshot {
   // noinspection JSCheckFunctionSignatures
   return JSON.parse(fs.readFileSync("addresses.json").toString())
 }
@@ -28,15 +41,23 @@ export function equalTol(a: BigNumber, b: BigNumber) {
   expect(a).lt(b.mul(RES_TOL_UPPER).div(RES_TOL_TOTAL))
 }
 
-export async function revSnapshot(id: string) {
+export async function snapshot(): Promise<string> {
+  const snapshotId = await network.provider.request({
+    method: "evm_snapshot",
+  })
+
+  return snapshotId as string
+}
+
+export async function revertSnapshot(id: string) {
   await network.provider.request({
     method: "evm_revert",
     params: [id],
   })
-
-  return await network.provider.request({
-    method: "evm_snapshot",
-  })
 }
 
-export const noDeadline = Math.floor(Date.now() / 1000) * 2
+export async function revertAndSnapshot(id: string): Promise<string> {
+  await revertSnapshot(id)
+
+  return snapshot()
+}
