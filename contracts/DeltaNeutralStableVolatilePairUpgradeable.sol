@@ -255,7 +255,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             code = _tokens.cUniLp.redeemUnderlying(amountUniLp);
             require(code == 0, string(abi.encodePacked("DNPair: fuse LP redeem 1 ", Strings.toString(code))));
 
-            (, amountVolToSwap) = uniV2Router.removeLiquidity(
+            (, uint amountVolFromDex) = uniV2Router.removeLiquidity(
                 address(_tokens.stable),
                 address(_tokens.vol),
                 amountUniLp,
@@ -264,6 +264,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
                 address(this),
                 uniArgs.deadline
             );
+            amountVolToSwap = amountVolFromStable + amountVolFromDex - amountVolToRepay;
         } else {
             // Redeem enough from Fuse so that we can then remove enough liquidity from Uniswap to cover the
             // remaining owed volatile amount, then redeem the remaining amount from Fuse and remove the
