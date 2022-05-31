@@ -61,3 +61,7 @@ export async function revertAndSnapshot(id: string): Promise<string> {
 
   return snapshot()
 }
+
+export async function increaseTime(time: number) {
+  await network.provider.send("evm_increaseTime", [time])
+}
