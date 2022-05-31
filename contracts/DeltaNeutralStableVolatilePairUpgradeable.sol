@@ -249,18 +249,19 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         // To avoid stack too deep
         UniArgs memory uniArgs = uniArgs;
         
+        uint amountVolToSwap;
         if (amountVolToRepay <= amountVolFromStable) {
             // Redeem everything and remove all liquidity from Uniswap
             code = _tokens.cUniLp.redeemUnderlying(amountUniLp);
             require(code == 0, string(abi.encodePacked("DNPair: fuse LP redeem 1 ", Strings.toString(code))));
 
-            uniV2Router.removeLiquidity(
+            (, amountVolToSwap) = uniV2Router.removeLiquidity(
                 address(_tokens.stable),
                 address(_tokens.vol),
                 amountUniLp,
                 uniArgs.amountStableMin,
                 uniArgs.amountVolMin,
-                msg.sender,
+                address(this),
                 uniArgs.deadline
             );
         } else {
@@ -305,19 +306,21 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
                 uniArgs.deadline
             );
 
-            uniV2Router.swapExactTokensForTokens(
-                amountVolFromDex + amountVolFromDex2 + amountVolFromStable - amountVolToRepay,
-                1,
-                uniArgs.pathVolToStable,
-                address(this),
-                block.timestamp
-            );
-
-            // TODO: take into account that this contract has MINIMUM_LIQUIDITY tokens which would
-            // be taken by these lines if a pair was made for its own AH liquidity token
-            amountStableToUser = _tokens.stable.balanceOf(address(this));
-            _tokens.stable.safeTransfer(msg.sender, amountStableToUser);
+            amountVolToSwap = amountVolFromDex + amountVolFromDex2 + amountVolFromStable - amountVolToRepay;
         }
+
+        uniV2Router.swapExactTokensForTokens(
+            amountVolToSwap,
+            1,
+            uniArgs.pathVolToStable,
+            address(this),
+            block.timestamp
+        );
+
+        // TODO: take into account that this contract has MINIMUM_LIQUIDITY tokens which would
+        // be taken by these lines if a pair was made for its own AH liquidity token
+        amountStableToUser = _tokens.stable.balanceOf(address(this));
+        _tokens.stable.safeTransfer(msg.sender, amountStableToUser);
 
         _burn(msg.sender, liquidity);
 
