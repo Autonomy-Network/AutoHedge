@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.6;
 
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 
 import "../external/compound/PriceOracle.sol";
@@ -23,7 +22,6 @@ import "../../contracts/DeltaNeutralStableVolatilePairUpgradeable.sol";
  * @dev Implements the `PriceOracle` interface used by Fuse pools (and Compound v2).
  */
 contract UniswapLpTokenPriceOracle is PriceOracle {
-    using SafeMathUpgradeable for uint256;
 
     address public immutable weth;
 
@@ -49,7 +47,7 @@ contract UniswapLpTokenPriceOracle is PriceOracle {
         address underlying = CErc20(address(cToken)).underlying();
         // Comptroller needs prices to be scaled by 1e(36 - decimals)
         // Since `_price` returns prices scaled by 18 decimals, we must scale them by 1e(36 - 18 - decimals)
-        return _price(underlying).mul(1e18).div(10 ** uint256(ERC20Upgradeable(underlying).decimals()));
+        return _price(underlying) * (1e18) / (10 ** uint256(ERC20Upgradeable(underlying).decimals()));
     }
 
     /**
@@ -61,76 +59,22 @@ contract UniswapLpTokenPriceOracle is PriceOracle {
         (IERC20Metadata stable,,IERC20Metadata volatile, ICErc20 cVol,IERC20Metadata uniLp, ICErc20 cUniLp) = pair.tokens();
 
         // get the prices of the volatile and the stable
-        uint stablePriceInEth = address(stable) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(stable)).mul(1e18).div(10 ** uint256(stable.decimals()));
-        uint volatilePriceInEth = address(volatile) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(volatile)).mul(1e18).div(10 ** uint256(volatile.decimals()));
-    
-        uint uniLpPriceInEth = address(uniLp) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(uniLp)).mul(1e18).div(10 ** uint256(uniLp.decimals()));
+        uint stablePriceInEth = address(stable) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(stable)) * (1e18) / (10 ** uint256(stable.decimals()));
+        uint volatilePriceInEth = address(volatile) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(volatile)) * (1e18) / (10 ** uint256(volatile.decimals()));
+        uint uniLpPriceInEth = address(uniLp) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(uniLp)) * (1e18) / (10 ** uint256(uniLp.decimals()));
 
         // convert that to the amounts of stable and volatile the pool owns
-        // uint uniLpValueInEth = cUniLp.balanceOfUnderlying(token) * uniLpPriceInEth; // TODO check if it's this line or the one bellow
-        uint uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) * uniLpPriceInEth; // TODO check if it's this line or the one above
+        uint uniLpValueInEth = cUniLp.balanceOfUnderlying(token) * uniLpPriceInEth; // TODO check if it's this line or the one bellow
+        // uint uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) * uniLpPriceInEth; // TODO check if it's this line or the one above
 
-        // get the amount of volatile owed
-        uint stableAmountLentOut = cUniLp.balanceOfUnderlying(token);
+        // get stables lent out
+        uint stableLentOutValueInEth = cUniLp.balanceOfUnderlying(token) * stablePriceInEth;
 
-        uint stableLentOutValueInEth = stableAmountLentOut * stablePriceInEth;
-
-        // get the amount of stables lent out
-        uint volatileAmountOwed = cVol.borrowBalanceCurrent(address(this));
-
-        uint volatileOwedValueInEth = volatileAmountOwed * volatilePriceInEth;
+        // get volatile owed
+        uint volatileOwedValueInEth = cVol.borrowBalanceCurrent(address(this)) * volatilePriceInEth;
 
         uint totalValue = uniLpValueInEth + stableLentOutValueInEth - volatileOwedValueInEth;
 
         return totalValue;
-    }
-
-    /**
-     * @dev Fast square root function.
-     * Implementation from: https://github.com/Uniswap/uniswap-lib/commit/99f3f28770640ba1bb1ff460ac7c5292fb8291a0
-     * Original implementation: https://github.com/abdk-consulting/abdk-libraries-solidity/blob/master/ABDKMath64x64.sol#L687
-     */
-    function sqrt(uint x) internal pure returns (uint) {
-        if (x == 0) return 0;
-        uint xx = x;
-        uint r = 1;
-
-        if (xx >= 0x100000000000000000000000000000000) {
-            xx >>= 128;
-            r <<= 64;
-        }
-        if (xx >= 0x10000000000000000) {
-            xx >>= 64;
-            r <<= 32;
-        }
-        if (xx >= 0x100000000) {
-            xx >>= 32;
-            r <<= 16;
-        }
-        if (xx >= 0x10000) {
-            xx >>= 16;
-            r <<= 8;
-        }
-        if (xx >= 0x100) {
-            xx >>= 8;
-            r <<= 4;
-        }
-        if (xx >= 0x10) {
-            xx >>= 4;
-            r <<= 2;
-        }
-        if (xx >= 0x8) {
-            r <<= 1;
-        }
-
-        r = (r + x / r) >> 1;
-        r = (r + x / r) >> 1;
-        r = (r + x / r) >> 1;
-        r = (r + x / r) >> 1;
-        r = (r + x / r) >> 1;
-        r = (r + x / r) >> 1;
-        r = (r + x / r) >> 1; // Seven iterations should be enough
-        uint r1 = x / r;
-        return (r < r1 ? r : r1);
     }
 }
