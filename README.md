@@ -15,7 +15,7 @@ An AutoHedge LP token (AH-LP) is isued to the user that wraps the DEX position a
 ## How to run tests
 
 ```shell
-npx hardhat node --fork https://eth-mainnet.alchemyapi.io/v2/{API_KEY} [in termainal 1]
-npx hardhat run scripts/fuseSetup.js --network local [in termainal 2]
-npx hardhat test --network local [in termainal 2]
+npx hardhat node --fork https://eth-mainnet.alchemyapi.io/v2/{API_KEY} [in terminal 1]
+npx hardhat run scripts/fuseSetup.js --network local [in terminal 2]
+npx hardhat test --network local [in terminal 2]
 ```
