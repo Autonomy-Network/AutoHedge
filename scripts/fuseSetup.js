@@ -6,7 +6,7 @@ const {expect} = require('chai')
 
 const {Interface, parseEther} = ethers.utils
 
-const {getEthPrice} = require('./utils');
+const {getEthPrice, sleep} = require('./utils');
 
 const WETH = require('../thirdparty/WETH.json')
 const DAI = require('../thirdparty/DAI.json')
@@ -188,7 +188,7 @@ async function setupFunds() {
 }
 
 async function deployAutonomy() {
-    const po = await (await ethers.getContractFactory('PriceOracle')).deploy(parseEther('2000'), ethers.BigNumber.from(5000000000))
+    const po = await (await ethers.getContractFactory('contracts/autonomy/PriceOracle.sol:PriceOracle')).deploy(parseEther('2000'), ethers.BigNumber.from(5000000000))
     const o = await (await ethers.getContractFactory('Oracle')).deploy(po.address, false)
     const sm = await (await ethers.getContractFactory('StakeManager')).deploy(o.address)
     const uf = await (await ethers.getContractFactory('Forwarder')).deploy()
@@ -239,8 +239,11 @@ async function main() {
     fuse = c(FusePoolDirectory)
     fuseLens = c(FusePoolLens)
     await deployMasterPriceOracle()
+    await sleep(1000) // sleep 1s to avoid flooding alchemy endpoint
     await deployPool()
+    await sleep(1000)
     await deployMarkets()
+    await sleep(1000)
     
     uniLp = new ethers.Contract(UNIV2_DAI_ETH_ADDR, WETH.abi, owner)
     cVol = new ethers.Contract(await unitroller.cTokensByUnderlying(weth.address), ICErc20.abi, owner)

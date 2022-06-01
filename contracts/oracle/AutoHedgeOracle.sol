@@ -14,6 +14,8 @@ import "./BasePriceOracle.sol";
 import "../../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
 import "../../contracts/DeltaNeutralStableVolatilePairUpgradeable.sol";
 
+import "hardhat/console.sol";
+
 
 /**
  * @title UniswapLpTokenPriceOracle
@@ -21,7 +23,7 @@ import "../../contracts/DeltaNeutralStableVolatilePairUpgradeable.sol";
  * @notice UniswapLpTokenPriceOracle is a price oracle for Uniswap (and SushiSwap) LP tokens.
  * @dev Implements the `PriceOracle` interface used by Fuse pools (and Compound v2).
  */
-contract UniswapLpTokenPriceOracle is PriceOracle {
+contract AutoHedgeOracle is PriceOracle {
 
     address public immutable weth;
 
@@ -58,20 +60,34 @@ contract UniswapLpTokenPriceOracle is PriceOracle {
 
         (IERC20Metadata stable,,IERC20Metadata volatile, ICErc20 cVol,IERC20Metadata uniLp, ICErc20 cUniLp) = pair.tokens();
 
+        console.log("(A)");
+        console.log(address(pair));
+        console.log("!");
+        console.log(cUniLp.balanceOfUnderlying(address(pair))); // ! This revert without a reason
+        console.log("!");
+
         // get the prices of the volatile and the stable
         uint stablePriceInEth = address(stable) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(stable)) * (1e18) / (10 ** uint256(stable.decimals()));
         uint volatilePriceInEth = address(volatile) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(volatile)) * (1e18) / (10 ** uint256(volatile.decimals()));
         uint uniLpPriceInEth = address(uniLp) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(uniLp)) * (1e18) / (10 ** uint256(uniLp.decimals()));
 
+        console.log("(B)");
+
         // convert that to the amounts of stable and volatile the pool owns
-        uint uniLpValueInEth = cUniLp.balanceOfUnderlying(token) * uniLpPriceInEth; // TODO check if it's this line or the one bellow
-        // uint uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) * uniLpPriceInEth; // TODO check if it's this line or the one above
+        // uint uniLpValueInEth = cUniLp.balanceOfUnderlying(token) * uniLpPriceInEth; // TODO check if it's this line or the one bellow
+        uint uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) * uniLpPriceInEth; // TODO check if it's this line or the one above
+
+        console.log("(C)");
 
         // get stables lent out
         uint stableLentOutValueInEth = cUniLp.balanceOfUnderlying(token) * stablePriceInEth;
+        
+        console.log("(D)");
 
         // get volatile owed
         uint volatileOwedValueInEth = cVol.borrowBalanceCurrent(address(this)) * volatilePriceInEth;
+        
+        console.log("(E)");
 
         uint totalValue = uniLpValueInEth + stableLentOutValueInEth - volatileOwedValueInEth;
 
