@@ -493,7 +493,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       await uniV2Router
         .connect(priceCoordinator)
         .swapExactTokensForTokens(
-          daiAmountBefore.div(2),
+          daiAmountBefore.div(20),
           1,
           [dai.address, weth.address],
           priceCoordinator.address,
@@ -512,7 +512,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       await revertSnapshot(testSnapshotId)
     })
 
-    it("should work as expected when repay amount is smaller than current amount", async () => {
+    it("should work as expected when repay amount is smaller than available amount", async () => {
       const wethPrice = await getWETHPrice()
 
       const amountStableInit = parseEther(`${wethPrice * 2.2}`) // fuse min borrow amount is 1 ETH, and half is kept as DAI
@@ -646,6 +646,180 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         lpToBeRemoved.mul(wethBalanceInUniPair).div(lpTotalSupply)
       )
       expect(burnEventArgs.to).to.equal(pair.address)
+    })
+
+    it("should work as expected when repay amount is more than available amount", async () => {
+      const wethPrice = await getWETHPrice()
+
+      const amountStableInit = parseEther(`${wethPrice * 2.2}`) // fuse min borrow amount is 1 ETH, and half is kept as DAI
+      const amountVolZapMin = parseEther("1")
+      const amountStableMin = 1
+      const amountVolMin = 1
+      const swapAmountOutMin = 1
+
+      let uniEstimateSnapshot = await snapshot()
+
+      const amountsStableToVol = await uniV2Router.getAmountsOut(
+        amountStableInit.div(2),
+        [dai.address, weth.address]
+      )
+
+      const amountVolEstimated = amountsStableToVol[1]
+      await uniV2Router.swapExactTokensForTokens(
+        amountStableInit.sub(amountsStableToVol[0]),
+        1,
+        [dai.address, weth.address],
+        owner.address,
+        TEN_18
+      )
+      const amountStableEstimated = amountVolEstimated
+        .mul(await dai.balanceOf(UNIV2_DAI_ETH_ADDR))
+        .div(await weth.balanceOf(UNIV2_DAI_ETH_ADDR))
+      await uniV2Router.addLiquidity(
+        dai.address,
+        weth.address,
+        amountStableEstimated,
+        amountVolEstimated,
+        1,
+        1,
+        owner.address,
+        TEN_18
+      )
+
+      await revertSnapshot(uniEstimateSnapshot)
+
+      let tx = await pair.deposit(
+        amountStableInit,
+        amountVolZapMin,
+        {
+          amountStableMin,
+          amountVolMin,
+          deadline: noDeadline,
+          pathStableToVol: [dai.address, weth.address],
+          pathVolToStable: [weth.address, dai.address],
+          swapAmountOutMin,
+        },
+        owner.address
+      )
+
+      let receipt = await tx.wait()
+      const depositedEvent = receipt.events?.pop()
+      const args = depositedEvent?.args ?? defaultDepositEvent
+
+      // const { amountStable, amountUniLp, amountVol } = args
+
+      // Amount of volatile token to be repaid is lower than the amount to be withdrawn if we lower WETH price
+      await raiseWETHPrice()
+
+      const underlyingStableBalance =
+        await cStable.callStatic.balanceOfUnderlying(pair.address)
+
+      // Withdraw 50% of liquidity
+      const liquidity = (await pair.balanceOf(owner.address)).div(2)
+      const totalSupply = await pair.totalSupply()
+
+      const amountStableFromLending = underlyingStableBalance
+        .mul(liquidity)
+        .div(totalSupply)
+
+      const withdrawSwapAmountsEstimated = await uniV2Router.getAmountsOut(
+        amountStableFromLending,
+        [dai.address, weth.address]
+      )
+
+      const amountVolWithdrawEstimated = withdrawSwapAmountsEstimated[1]
+      const amountVolToRepay = (
+        await cVol.callStatic.borrowBalanceCurrent(pair.address)
+      )
+        .mul(liquidity)
+        .div(totalSupply)
+
+      // Make sure amount to repay is smaller than actual amount
+      expect(amountVolToRepay).gt(amountVolWithdrawEstimated)
+
+      const daiBalanceInUniPair = (await dai.balanceOf(UNIV2_DAI_ETH_ADDR)).add(
+        amountStableFromLending
+      )
+      const wethBalanceInUniPair = (
+        await weth.balanceOf(UNIV2_DAI_ETH_ADDR)
+      ).sub(amountVolWithdrawEstimated)
+      const amountUniLp = (
+        await cUniLp.callStatic.balanceOfUnderlying(pair.address)
+      )
+        .mul(liquidity)
+        .div(totalSupply)
+      const lpTotalSupply = await uniLp.totalSupply()
+
+      tx = await pair.withdraw(liquidity, {
+        amountStableMin,
+        amountVolMin,
+        deadline: noDeadline,
+        pathStableToVol: [dai.address, weth.address],
+        pathVolToStable: [weth.address, dai.address],
+        swapAmountOutMin,
+      })
+
+      receipt = await tx.wait()
+
+      console.log(
+        receipt.events?.filter(({ event }) => event === "UniLpAmount")
+      )
+
+      const uniV2BurnEventTopic = utils.id(
+        "Burn(address,uint256,uint256,address)"
+      )
+
+      const burnEvents = receipt.events?.filter(({ topics }) =>
+        topics.includes(uniV2BurnEventTopic)
+      )
+
+      // Check if it runs `else` case. Should have 2 liquidity removals
+      expect(burnEvents?.length).to.equal(2)
+
+      const paidLpBurnEventArgs = parseUniV2BurnEvent(burnEvents![0])
+
+      const remainingLpBurnEventArgs = parseUniV2BurnEvent(burnEvents![1])
+
+      const amountUniLpPaidFirst = amountUniLp
+        .mul(amountVolWithdrawEstimated)
+        .div(amountVolToRepay)
+
+      // Check first LP removal for repaying remaining volatile token amount
+      expect(paidLpBurnEventArgs.sender).to.equal(uniV2Router.address)
+      equalTol(
+        paidLpBurnEventArgs.amount0,
+        amountUniLpPaidFirst.mul(daiBalanceInUniPair).div(lpTotalSupply)
+      )
+      equalTol(
+        paidLpBurnEventArgs.amount1,
+        amountUniLpPaidFirst.mul(wethBalanceInUniPair).div(lpTotalSupply)
+      )
+      expect(paidLpBurnEventArgs.to).to.equal(pair.address)
+
+      const daiBalanceInUniPairAfterRepay = daiBalanceInUniPair.sub(
+        paidLpBurnEventArgs.amount0
+      )
+      const wethBalanceInUniPairAfterRepay = wethBalanceInUniPair.sub(
+        paidLpBurnEventArgs.amount1
+      )
+      const amountUniLpAfterRepay = amountUniLp.sub(amountUniLpPaidFirst)
+      const lpTotalSupplyAfterRepay = lpTotalSupply.sub(amountUniLpPaidFirst)
+
+      // Check the second LP removal
+      expect(remainingLpBurnEventArgs.sender).to.equal(uniV2Router.address)
+      equalTol(
+        remainingLpBurnEventArgs.amount0,
+        amountUniLpAfterRepay
+          .mul(daiBalanceInUniPairAfterRepay)
+          .div(lpTotalSupplyAfterRepay)
+      )
+      equalTol(
+        remainingLpBurnEventArgs.amount1,
+        amountUniLpAfterRepay
+          .mul(wethBalanceInUniPairAfterRepay)
+          .div(lpTotalSupplyAfterRepay)
+      )
+      expect(remainingLpBurnEventArgs.to).to.equal(pair.address)
     })
 
     // it("should work as expected", async () => {
