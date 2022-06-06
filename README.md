@@ -15,7 +15,7 @@ An AutoHedge LP token (AH-LP) is issued to the user that wraps the DEX position 
 ## How to run tests
 
 ```shell
-yarn fork https://eth-mainnet.alchemyapi.io/v2/{API_KEY} [in termainal 1]
-yarn fuse [in termainal 2]
-yarn test [in termainal 2]
+yarn fork https://eth-mainnet.alchemyapi.io/v2/{API_KEY} [in terminal 1]
+yarn fuse [in terminal 2]
+yarn test [in terminal 2]
 ```
