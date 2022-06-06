@@ -130,7 +130,8 @@ describe('DeltaNeutralStableVolatilePairUpgradeable', function () {
         const oracleAdmin = await ethers.getSigner(MASTER_ORACLE_ADMIN)
 
         const tokens = await pair.tokens();
-        console.log(tokens.uniLp);
+        console.log(pair.address);
+        console.log(tokens);
 
         masterOracle = c(MasterPriceOracle).attach(MASTER_ORACLE).connect(oracleAdmin)
         await masterOracle.add([ pair.address, tokens.uniLp ], [ ahOracle.address, uniLpOracle.address ])
@@ -603,7 +604,7 @@ describe('DeltaNeutralStableVolatilePairUpgradeable', function () {
         expect(await pair.balanceOf(alice.address)).to.equal(ownerLiquidityBalance.sub(aliceLiquidityWithdraw))
     })
 
-    it.skip('Should check oracle', async function () {
+    it('Should check oracle', async function () {
         // I'm aware this is a super noob move - just duct taping to save time
         testSnapshotId = await revSnapshot(testSnapshotId)
 
@@ -729,31 +730,34 @@ describe('DeltaNeutralStableVolatilePairUpgradeable', function () {
                 swapAmountOutMin
             ]
         )
-        console.log(amount)
-        console.log(ahOracle.address)
 
+        const b = await cUniLp.callStatic.accrueInterest();
+        console.log(cUniLp.address, pair.address)
+        console.log(b)
 
-
-
-        // TODO
-        const a = await ahOracle.price(pair.address);
+        const a = await masterOracle.price(pair.address);
         console.log(a);
-
 
         
     })
 
-    it('TRY', async function () {
-        console.log(ahOracle.address)
-        console.log(masterOracle.address)
+    it.skip('TRY', async function () {
+        // console.log(ahOracle.address)
+        // console.log(masterOracle.address)
         
         // TODO the rari/fuse master price oracle miss a sub oracle for the uniLp token
 
         // const tokens = await pair.tokens();
         // console.log(tokens);
 
+        const b = await cUniLp.callStatic.balanceOfUnderlying(pair.address);
+        console.log(cUniLp.address)
+        console.log(b)
+
         const a = await masterOracle.price(pair.address);
         console.log(a);
+
+        
     })
 
     it.skip('Should rebalance, borrow more ETH, no fee', async function () {

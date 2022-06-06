@@ -58,39 +58,57 @@ contract AutoHedgeOracle is PriceOracle {
     function _price(address token) internal virtual returns (uint) {
         DeltaNeutralStableVolatilePairUpgradeable pair = DeltaNeutralStableVolatilePairUpgradeable(token);
 
-        (IERC20Metadata stable,,IERC20Metadata volatile, ICErc20 cVol,IERC20Metadata uniLp, ICErc20 cUniLp) = pair.tokens();
+        (
+            IERC20Metadata stable,
+            ICErc20 cStable,
+            IERC20Metadata volatile,
+            ICErc20 cVol,
+            IERC20Metadata uniLp,
+            ICErc20 cUniLp
+        ) = pair.tokens();
 
         console.log("(A)");
-        console.log(address(pair));
+        // console.log(token);
+        // console.log(address(stable));
+        // console.log(address(cStable));
+        // console.log(address(volatile));
+        // console.log(address(cVol));
+        // console.log(address(uniLp));
+        // console.log(address(cUniLp));
         console.log("!");
-        console.log(cUniLp.balanceOfUnderlying(address(pair))); // ! This revert without a reason
-        console.log("!");
+        // console.log(cUniLp.balanceOf(token)); // This is ok
+        // console.log(cUniLp.exchangeRateStored()); // This is ok
+        // console.log(cUniLp.getCash()); // This is ok
+        console.log(cUniLp.accrueInterest()); // ! This revert without a reason
+        // console.log(cUniLp.exchangeRateCurrent()); // ! This revert without a reason
+        // console.log(cUniLp.balanceOfUnderlying(token)); // ! This revert without a reason
+        // console.log("!");
 
-        // get the prices of the volatile and the stable
-        uint stablePriceInEth = address(stable) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(stable)) * (1e18) / (10 ** uint256(stable.decimals()));
-        uint volatilePriceInEth = address(volatile) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(volatile)) * (1e18) / (10 ** uint256(volatile.decimals()));
-        uint uniLpPriceInEth = address(uniLp) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(uniLp)) * (1e18) / (10 ** uint256(uniLp.decimals()));
+        // // get the prices of the volatile and the stable
+        // uint stablePriceInEth = address(stable) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(stable)) * (1e18) / (10 ** uint256(stable.decimals()));
+        // uint volatilePriceInEth = address(volatile) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(volatile)) * (1e18) / (10 ** uint256(volatile.decimals()));
+        // uint uniLpPriceInEth = address(uniLp) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(uniLp)) * (1e18) / (10 ** uint256(uniLp.decimals()));
 
-        console.log("(B)");
+        // console.log("(B)");
 
-        // convert that to the amounts of stable and volatile the pool owns
-        // uint uniLpValueInEth = cUniLp.balanceOfUnderlying(token) * uniLpPriceInEth; // TODO check if it's this line or the one bellow
-        uint uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) * uniLpPriceInEth; // TODO check if it's this line or the one above
+        // // convert that to the amounts of stable and volatile the pool owns
+        // uint uniLpValueInEth = cUniLp.balanceOfUnderlying(token) * uniLpPriceInEth;
 
-        console.log("(C)");
+        // console.log("(C)");
 
-        // get stables lent out
-        uint stableLentOutValueInEth = cUniLp.balanceOfUnderlying(token) * stablePriceInEth;
+        // // get stables lent out
+        // uint stableLentOutValueInEth = cUniLp.balanceOfUnderlying(token) * stablePriceInEth;
         
-        console.log("(D)");
+        // console.log("(D)");
 
-        // get volatile owed
-        uint volatileOwedValueInEth = cVol.borrowBalanceCurrent(address(this)) * volatilePriceInEth;
+        // // get volatile owed
+        // uint volatileOwedValueInEth = cVol.borrowBalanceCurrent(address(this)) * volatilePriceInEth;
         
-        console.log("(E)");
+        // console.log("(E)");
 
-        uint totalValue = uniLpValueInEth + stableLentOutValueInEth - volatileOwedValueInEth;
+        // uint totalValue = uniLpValueInEth + stableLentOutValueInEth - volatileOwedValueInEth;
 
-        return totalValue;
+        // return totalValue;
+        return 0;
     }
 }
