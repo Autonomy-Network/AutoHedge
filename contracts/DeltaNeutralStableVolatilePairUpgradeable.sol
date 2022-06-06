@@ -85,6 +85,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
     event Deposited(address indexed user, uint amountStable, uint amountVol, uint amountUniLp, uint amountStableSwap, uint amountMinted); // TODO check args
     event Withdrawn(address indexed user, uint amountStableFromLending, uint amountVolToRepay, uint amountBurned);
 
+    receive() external payable {}
 
     function deposit(
         uint amountStableInit,
@@ -376,7 +377,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             if (_tokens.vol == weth) {
                 // Get enough WETH
                 amountStableToRedeem = uniV2Router.getAmountsIn(amountVolToRepay + feeAmount, pathStableToVol)[0];
-                _tokens.cStable.redeem(amountStableToRedeem);
+                _tokens.cStable.redeemUnderlying(amountStableToRedeem);
                 uniV2Router.swapTokensForExactTokens(amountVolToRepay + feeAmount, amountStableToRedeem, pathStableToVol, address(this), block.timestamp);
 
                 // Repay the debt
