@@ -45,6 +45,10 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
         ICErc20 cUniLp;
     }
 
+    event Deposited(address indexed user, uint amountStable, uint amountVol, uint amountUniLp, uint amountStableSwap, uint amountMinted);
+    event FeeDeposited(address indexed user, address indexed feeReceiver, uint amountMinted);
+    event Withdrawn(address indexed user, uint amountStableFromLending, uint amountVolToRepay, uint amountBurned);
+
     function initialize(
         IUniswapV2Router02 uniV2Router_,
         Tokens memory tokens,
@@ -61,7 +65,8 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
         uint amountStableDesired,
         uint amountVolDesired,
         UniArgs calldata uniArgs,
-        address to
+        address to,
+        address referrer
     ) external returns (uint amountStable, uint amountVol, uint amountUniLp);
 
     function withdraw(
