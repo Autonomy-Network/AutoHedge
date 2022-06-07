@@ -39,7 +39,6 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
     }
 
     event Deposited(address indexed user, uint amountStable, uint amountVol, uint amountUniLp, uint amountStableSwap, uint amountMinted);
-    event FeeDeposited(address indexed user, address indexed feeReceiver, uint amountMinted);
     event Withdrawn(address indexed user, uint amountStableFromLending, uint amountVolToRepay, uint amountBurned);
 
     function initialize(
