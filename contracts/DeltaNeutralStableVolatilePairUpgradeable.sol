@@ -12,6 +12,7 @@ import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IComptroller.sol";
 import "../interfaces/ICErc20.sol";
 import "../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
+import "../interfaces/IDeltaNeutralStableVolatileFactory.sol";
 import "../interfaces/IWETH.sol";
 import "./UniswapV2ERC20Upgradeable.sol";
 import "./Maths.sol";
@@ -82,15 +83,13 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
 
     // TODO add checks on the return values of all Compound fncs for error msgs and revert if not 0, with the code in the revert reason
 
-    event Deposited(address indexed user, uint amountStable, uint amountVol, uint amountUniLp, uint amountStableSwap, uint amountMinted); // TODO check args
-    event Withdrawn(address indexed user, uint amountStableFromLending, uint amountVolToRepay, uint amountBurned);
-
 
     function deposit(
         uint amountStableInit,
         uint amountVolZapMin,
         UniArgs calldata uniArgs,
-        address to
+        address to,
+        address referrer
     ) external override nonReentrant returns (uint amountStable, uint amountVol, uint amountUniLp) {
         Tokens memory _tokens = tokens; // Gas savings
         require(
@@ -100,6 +99,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             uniArgs.pathStableToVol[uniArgs.pathStableToVol.length-1] == address(_tokens.vol),
             "DNPair: swap path invalid"
         );
+
+        UniArgs memory uniArgs = uniArgs;
 
         // Get stables from the user and swap to receive `amountVolZapMin` of the volatile token
         _tokens.stable.safeTransferFrom(msg.sender, address(this), amountStableInit);
@@ -140,11 +141,19 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         // to the stablecoin lending position and the AutoHedge LP token
         uint currentUniLpBal = _tokens.cUniLp.balanceOfUnderlying(address(this));
         uint increaseFactor = currentUniLpBal == 0 ? 0 : amountUniLp * BASE_FACTOR / currentUniLpBal;
+
+        address feeReceiver = referrer;
+
+        if (feeReceiver == address(0)) {
+            feeReceiver = IDeltaNeutralStableVolatileFactory(owner()).feeReceiver();
+        }
+
+        require(feeReceiver != address(0), "DNPair: invalid fee receiver");
         
         // Mint AutoHedge LP tokens to the user. Need to do this after LPing so we know the exact amount of
         // assets that are LP'd with, but before affecting any of the borrowing so it simplifies those
         // calculations
-        uint liquidity = _mintLiquidity(to, amountStable, amountVol, increaseFactor);
+        (uint liquidityFee, uint liquidityForUser) = _mintLiquidity(to, feeReceiver, amountStable, amountVol, increaseFactor);
         
         // Use LP token as collateral
         uint code = _tokens.cUniLp.mint(amountUniLp);
@@ -182,7 +191,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         // TODO check if things need rebalancing already, because by trading the volatile token for the stable token, we moved the market
         // rebalance(5 * 10**9);
 
-        emit Deposited(msg.sender, amountStable, amountVol, amountUniLp, amountsVolToStable[amountsVolToStable.length-1], liquidity);
+        emit Deposited(msg.sender, amountStable, amountVol, amountUniLp, amountsVolToStable[amountsVolToStable.length-1], liquidityForUser);
+        emit FeeDeposited(msg.sender, feeReceiver, liquidityFee);
     }
 
     // This uses the Uniswap LP as a way to cover any extra debt that isn't coverable from the lending position.
@@ -477,9 +487,16 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         mmBps = newMmBps;
     }
 
-    function _mintLiquidity(address to, uint amountStable, uint amountVol, uint increaseFactor) private returns (uint liquidity) {
+    function _mintLiquidity(
+        address to,
+        address feeReceiver,
+        uint amountStable,
+        uint amountVol,
+        uint increaseFactor
+    ) private returns (uint liquidityFee, uint liquidityForUser) {
         // (uint reserveStable, uint reserveVol, uint _totalSupply) = getReserves(amountStable, amountVol, amountUniLp);
         uint _totalSupply = totalSupply;
+        uint liquidity;
         if (_totalSupply == 0) {
             liquidity = Maths.sqrt(amountStable * amountVol) - MINIMUM_LIQUIDITY; // TODO ?
            _mint(address(this), MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
@@ -487,7 +504,13 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             liquidity = _totalSupply * increaseFactor / BASE_FACTOR;
         }
         require(liquidity > 0, 'DNPair: invalid liquidity mint');
-        _mint(to, liquidity);
+
+        // 0.03% fee to referrer or fee receiver
+        liquidityFee = liquidity * 3 / 10000;
+        liquidityForUser = liquidity - liquidityFee;
+
+        _mint(feeReceiver, liquidityFee);
+        _mint(to, liquidityForUser);
     }
 
 
