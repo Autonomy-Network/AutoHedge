@@ -30,6 +30,7 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
     address public override userFeeVeriForwarder;
     IDeltaNeutralStableVolatilePairUpgradeable.MmBps initMmBps;
     address public override feeReceiver;
+    uint public override depositFee;
 
     constructor(
         address logic_,
@@ -53,6 +54,8 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         userFeeVeriForwarder = userFeeVeriForwarder_;
         initMmBps = initMmBps_;
         feeReceiver = feeReceiver_;
+        // initial deposit fee is 0.3%
+        depositFee = 3e15;
     }
 
 
@@ -150,5 +153,10 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
     function setFeeReceiver(address newReceiver) external override onlyOwner {
         require(newReceiver != address(0), "DNFac: zero address");
         feeReceiver = newReceiver;
+    }
+
+    function setDepositFee(uint newDepositFee) external override onlyOwner {
+        require(newDepositFee > 0 && newDepositFee < 1 ether, "DNFac: invalid deposit fee");
+        depositFee = newDepositFee;
     }
 }

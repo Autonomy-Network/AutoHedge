@@ -156,13 +156,11 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         if (feeReceiver == address(0)) {
             feeReceiver = IDeltaNeutralStableVolatileFactory(owner()).feeReceiver();
         }
-
-        require(feeReceiver != address(0), "DNPair: invalid fee receiver");
         
         // Mint AutoHedge LP tokens to the user. Need to do this after LPing so we know the exact amount of
         // assets that are LP'd with, but before affecting any of the borrowing so it simplifies those
         // calculations
-        (uint liquidityFee, uint liquidityForUser) = _mintLiquidity(to, feeReceiver, amountStable, amountVol, increaseFactor);
+        (, uint liquidityForUser) = _mintLiquidity(to, feeReceiver, amountStable, amountVol, increaseFactor);
         
         // Use LP token as collateral
         uint code = _tokens.cUniLp.mint(amountUniLp);
@@ -201,7 +199,6 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         // rebalance(5 * 10**9);
 
         emit Deposited(msg.sender, amountStable, amountVol, amountUniLp, amountsVolToStable[amountsVolToStable.length-1], liquidityForUser);
-        emit FeeDeposited(msg.sender, feeReceiver, liquidityFee);
     }
 
     // This uses the Uniswap LP as a way to cover any extra debt that isn't coverable from the lending position.
@@ -514,8 +511,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         }
         require(liquidity > 0, 'DNPair: invalid liquidity mint');
 
-        // 0.03% fee to referrer or fee receiver
-        liquidityFee = liquidity * 3 / 10000;
+        liquidityFee = liquidity * IDeltaNeutralStableVolatileFactory(owner()).depositFee() / BASE_FACTOR;
         liquidityForUser = liquidity - liquidityFee;
 
         _mint(feeReceiver, liquidityFee);

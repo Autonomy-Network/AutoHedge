@@ -334,7 +334,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const liquidity = (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
         MINIMUM_LIQUIDITY
       )
-      const liqudityFee = liquidity.mul(3).div(10000) // 0.03% fee
+      const liqudityFee = liquidity.mul(await factory.depositFee()).div(TEN_18) // 0.3% fee
       expect(await pair.balanceOf(owner.address)).to.equal(
         liquidity.sub(liqudityFee)
       )
@@ -473,7 +473,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const liquidity = (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
         MINIMUM_LIQUIDITY
       )
-      const liquidityFee = liquidity.mul(3).div(10000)
+      const depositFee = await factory.depositFee()
+      const liquidityFee = liquidity.mul(depositFee).div(TEN_18)
       expect(await pair.balanceOf(owner.address)).to.equal(
         liquidity.sub(liquidityFee)
       )
@@ -619,7 +620,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         .mul(amountUniLp2)
         .div(amountUniLp.add(amountUniLp2))
       expect(await pair.balanceOf(feeReceiver.address)).to.equal(
-        liquidityFee.add(liquidity2.mul(3).div(10000))
+        liquidityFee.add(liquidity2.mul(depositFee).div(TEN_18))
       )
       equalTol(
         await pair.balanceOf(alice.address),
@@ -703,7 +704,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const liquidity = (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
         MINIMUM_LIQUIDITY
       )
-      const liqudityFee = liquidity.mul(3).div(10000) // 0.03% fee
+      const liqudityFee = liquidity.mul(await factory.depositFee()).div(TEN_18) // 0.3% fee
       expect(await pair.balanceOf(owner.address)).to.equal(
         liquidity.sub(liqudityFee)
       )
@@ -806,7 +807,9 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const liquidityTotal = (
         await mockSqrt.sqrt(amountVol.mul(amountStable))
       ).sub(MINIMUM_LIQUIDITY)
-      const liqudityFee = liquidityTotal.mul(3).div(10000)
+      const liqudityFee = liquidityTotal
+        .mul(await factory.depositFee())
+        .div(TEN_18)
       const ownerLiquidityBalance = liquidityTotal.sub(liqudityFee)
 
       // Amount of volatile token to be repaid is lower than the amount to be withdrawn if we lower WETH price
@@ -980,7 +983,9 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const liquidityTotal = (
         await mockSqrt.sqrt(amountVol.mul(amountStable))
       ).sub(MINIMUM_LIQUIDITY)
-      const liqudityFee = liquidityTotal.mul(3).div(10000)
+      const liqudityFee = liquidityTotal
+        .mul(await factory.depositFee())
+        .div(TEN_18)
       const ownerLiquidityBalance = liquidityTotal.sub(liqudityFee)
 
       // Amount of volatile token to be repaid is lower than the amount to be withdrawn if we lower WETH price
@@ -1224,7 +1229,9 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const liquidityTotal = (
         await mockSqrt.sqrt(amountVol.mul(amountStable))
       ).sub(MINIMUM_LIQUIDITY)
-      const liqudityFee = liquidityTotal.mul(3).div(10000)
+      const liqudityFee = liquidityTotal
+        .mul(await factory.depositFee())
+        .div(TEN_18)
       const ownerLiquidityBalance = liquidityTotal.sub(liqudityFee)
       expect(await pair.balanceOf(owner.address)).to.equal(
         ownerLiquidityBalance

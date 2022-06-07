@@ -17,6 +17,7 @@ interface IDeltaNeutralStableVolatileFactory {
     function createPair(IERC20Metadata stable, IERC20Metadata vol) external returns (address pair);
 
     function setFeeReceiver(address newReceiver) external;
+    function setDepositFee(uint newDepositFee) external;
     // function setFeeToSetter(address) external; TODO
 
     function uniV2Factory() external view returns (IUniswapV2Factory);
@@ -25,4 +26,5 @@ interface IDeltaNeutralStableVolatileFactory {
     function registry() external view returns (address payable);
     function userFeeVeriForwarder() external view returns (address);
     function feeReceiver() external view returns (address);
+    function depositFee() external view returns (uint);
 }
