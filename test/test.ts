@@ -1,5 +1,4 @@
-import { ethers, network } from "hardhat"
-import fs from "fs"
+import { ethers } from "hardhat"
 import { expect } from "chai"
 import { UniswapV2Router02, WETH } from "typechain/thirdparty"
 import {
@@ -27,9 +26,8 @@ import ICErc20Abi from "../artifacts/interfaces/ICErc20.sol/ICErc20.json"
 import WETHAbi from "../thirdparty/WETH.json"
 import DAI from "../thirdparty/DAI.json"
 import UniswapV2Router02Abi from "../thirdparty/UniswapV2Router02.json"
-import FuseFeeDistributorAbi from "../thirdparty/FuseFeeDistributor.json"
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
-import { BigNumber, constants, Event, utils } from "ethers"
+import { BigNumber, constants, ContractReceipt, Event, utils } from "ethers"
 
 const { parseEther, formatEther } = ethers.utils
 
@@ -66,6 +64,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
   let bob: SignerWithAddress
   let alice: SignerWithAddress
   let priceCoordinator: SignerWithAddress
+  let feeReceiver: SignerWithAddress
+  let referrer: SignerWithAddress
 
   let weth: WETH
   let dai: IERC20
@@ -101,8 +101,63 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     )
   }
 
+  function getDepositEvent(receipt: ContractReceipt) {
+    const depositedEvent = receipt.events?.find(
+      ({ event }) => event === "Deposited"
+    )
+    return depositedEvent?.args ?? defaultDepositEvent
+  }
+
+  async function estimateDeposit(amountStableInit: BigNumber) {
+    const testSnapshotId2 = await snapshot()
+
+    await dai.approve(uniV2Router.address, amountStableInit)
+    await weth.approve(uniV2Router.address, amountStableInit)
+    const amountsStableToVol = await uniV2Router.getAmountsOut(
+      amountStableInit.div(2),
+      [dai.address, weth.address]
+    )
+    const amountVolEstimated = amountsStableToVol[1]
+    await uniV2Router.swapExactTokensForTokens(
+      amountStableInit.sub(amountsStableToVol[0]),
+      1,
+      [dai.address, weth.address],
+      owner.address,
+      TEN_18
+    )
+    const amountStableEstimated = amountVolEstimated
+      .mul(await dai.balanceOf(UNIV2_DAI_ETH_ADDR))
+      .div(await weth.balanceOf(UNIV2_DAI_ETH_ADDR))
+    await uniV2Router.addLiquidity(
+      dai.address,
+      weth.address,
+      amountStableEstimated,
+      amountVolEstimated,
+      1,
+      1,
+      owner.address,
+      TEN_18
+    )
+    const amountStableSwappedIntoEstimated = (
+      await uniV2Router.getAmountsOut(amountVolEstimated, [
+        weth.address,
+        dai.address,
+      ])
+    )[1]
+
+    await revertSnapshot(testSnapshotId2)
+
+    return {
+      amountsStableToVol,
+      amountVolEstimated,
+      amountStableEstimated,
+      amountStableSwappedIntoEstimated,
+    }
+  }
+
   before(async () => {
-    ;[owner, bob, alice, priceCoordinator] = await ethers.getSigners()
+    ;[owner, bob, alice, priceCoordinator, feeReceiver, referrer] =
+      await ethers.getSigners()
 
     addresses = getAddresses()
 
@@ -144,7 +199,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         {
           min: parseEther("0.99"),
           max: parseEther("1.01"),
-        }
+        },
+        feeReceiver.address
       )
     )
 
@@ -182,7 +238,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
   })
 
   describe("deposit()", () => {
-    it("Should deposit", async function () {
+    it("Should deposit", async () => {
       const wethPrice = await getWETHPrice()
 
       const amountStableInit = parseEther(String(1.1 * wethPrice * 2)) // fuse min borrow amount is 1 ETH, and half is kept as DAI
@@ -197,43 +253,13 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       // To estimate the amount LP'd on Uniswap with, we need to know what the reserves of the pair is, which is
       // altered before LPing because we trade stable to vol in the same pair probably, so need to make the trade
       // 1st to measure the reserves after
-      const testSnapshotId2 = await snapshot()
 
-      await dai.approve(uniV2Router.address, amountStableInit)
-      await weth.approve(uniV2Router.address, amountStableInit)
-      const amountsStableToVol = await uniV2Router.getAmountsOut(
-        amountStableInit.div(2),
-        [dai.address, weth.address]
-      )
-      const amountVolEstimated = amountsStableToVol[1]
-      await uniV2Router.swapExactTokensForTokens(
-        amountStableInit.sub(amountsStableToVol[0]),
-        1,
-        [dai.address, weth.address],
-        owner.address,
-        TEN_18
-      )
-      const amountStableEstimated = amountVolEstimated
-        .mul(await dai.balanceOf(UNIV2_DAI_ETH_ADDR))
-        .div(await weth.balanceOf(UNIV2_DAI_ETH_ADDR))
-      await uniV2Router.addLiquidity(
-        dai.address,
-        weth.address,
-        amountStableEstimated,
+      const {
+        amountsStableToVol,
         amountVolEstimated,
-        1,
-        1,
-        owner.address,
-        TEN_18
-      )
-      const amountStableSwappedIntoEstimated = (
-        await uniV2Router.getAmountsOut(amountVolEstimated, [
-          weth.address,
-          dai.address,
-        ])
-      )[1]
-
-      await revertSnapshot(testSnapshotId2)
+        amountStableEstimated,
+        amountStableSwappedIntoEstimated,
+      } = await estimateDeposit(amountStableInit)
 
       const tx = await pair.deposit(
         amountStableInit,
@@ -246,13 +272,12 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
           pathVolToStable: [weth.address, dai.address],
           swapAmountOutMin,
         },
-        owner.address
+        owner.address,
+        constants.AddressZero
       )
       const receipt = await tx.wait()
-      const depositedEvent = receipt.events?.pop()
-      const args = depositedEvent?.args ?? defaultDepositEvent
 
-      const { amountStable, amountUniLp, amountVol } = args
+      const { amountStable, amountUniLp, amountVol } = getDepositEvent(receipt)
 
       // factory, pair, cTokens, owner
       expect(amountVol).to.equal(amountVolEstimated)
@@ -286,14 +311,17 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       // AutoHedge LP token
       expect(await pair.balanceOf(factory.address)).to.equal(0)
       expect(await pair.balanceOf(pair.address)).to.equal(MINIMUM_LIQUIDITY)
-      expect(await pair.balanceOf(owner.address)).to.equal(
-        (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
-          MINIMUM_LIQUIDITY
-        )
+      const liquidity = (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
+        MINIMUM_LIQUIDITY
       )
+      const liqudityFee = liquidity.mul(3).div(10000) // 0.03% fee
+      expect(await pair.balanceOf(owner.address)).to.equal(
+        liquidity.sub(liqudityFee)
+      )
+      expect(await pair.balanceOf(feeReceiver.address)).to.equal(liqudityFee)
     })
 
-    it("Should deposit twice", async function () {
+    it("Should deposit twice", async () => {
       const wethPrice = await getWETHPrice()
 
       const amountStableInit = parseEther(String(1.1 * wethPrice * 2)) // fuse min borrow amount is 1 ETH, and half is kept as DAI
@@ -372,13 +400,12 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
           pathVolToStable: [weth.address, dai.address],
           swapAmountOutMin,
         },
-        owner.address
+        owner.address,
+        constants.AddressZero
       )
       let receipt = await tx.wait()
-      let depositedEvent = receipt.events?.pop()
-      let args = depositedEvent?.args ?? defaultDepositEvent
 
-      const { amountStable, amountUniLp, amountVol } = args
+      const { amountStable, amountUniLp, amountVol } = getDepositEvent(receipt)
 
       // factory, pair, cTokens, owner
       expect(amountVol).to.equal(amountVolEstimated)
@@ -423,11 +450,14 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       // AutoHedge LP token
       expect(await pair.balanceOf(factory.address)).to.equal(0)
       expect(await pair.balanceOf(pair.address)).to.equal(MINIMUM_LIQUIDITY)
-      expect(await pair.balanceOf(owner.address)).to.equal(
-        (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
-          MINIMUM_LIQUIDITY
-        )
+      const liquidity = (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
+        MINIMUM_LIQUIDITY
       )
+      const liquidityFee = liquidity.mul(3).div(10000)
+      expect(await pair.balanceOf(owner.address)).to.equal(
+        liquidity.sub(liquidityFee)
+      )
+      expect(await pair.balanceOf(feeReceiver.address)).to.equal(liquidityFee)
 
       // Now to deposit again from Alice
 
@@ -507,17 +537,16 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
           pathVolToStable: [weth.address, dai.address],
           swapAmountOutMin,
         },
-        alice.address
+        alice.address,
+        constants.AddressZero
       )
       receipt = await tx.wait()
-      depositedEvent = receipt.events?.pop()
-      args = depositedEvent?.args ?? defaultDepositEvent
 
       const {
         amountStable: amountStable2,
         amountUniLp: amountUniLp2,
         amountVol: amountVol2,
-      } = args
+      } = getDepositEvent(receipt)
 
       // factory, pair, cTokens, owner
       expect(amountVol2).to.equal(amountVolEstimated2)
@@ -566,15 +595,99 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       // AutoHedge LP token
       expect(await pair.balanceOf(factory.address)).to.equal(0)
       expect(await pair.balanceOf(pair.address)).to.equal(MINIMUM_LIQUIDITY)
-      expect(await pair.balanceOf(owner.address)).to.equal(
-        (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
-          MINIMUM_LIQUIDITY
-        )
+      const liquidity2 = (await pair.totalSupply())
+        .mul(amountUniLp2)
+        .div(amountUniLp.add(amountUniLp2))
+      expect(await pair.balanceOf(feeReceiver.address)).to.equal(
+        liquidityFee.add(liquidity2.mul(3).div(10000))
       )
       equalTol(
         await pair.balanceOf(alice.address),
         await pair.balanceOf(owner.address)
       )
+    })
+
+    it("Should deposit to referrer", async () => {
+      const wethPrice = await getWETHPrice()
+
+      const amountStableInit = parseEther(String(1.1 * wethPrice * 2)) // fuse min borrow amount is 1 ETH, and half is kept as DAI
+      const amountVolZapMin = parseEther("1")
+      const amountStableMin = 0
+      const amountVolMin = 0
+      const swapAmountOutMin = 0
+
+      const wethBalanceBefore = await weth.balanceOf(owner.address)
+      const daiBalanceBefore = await dai.balanceOf(owner.address)
+
+      // To estimate the amount LP'd on Uniswap with, we need to know what the reserves of the pair is, which is
+      // altered before LPing because we trade stable to vol in the same pair probably, so need to make the trade
+      // 1st to measure the reserves after
+
+      const {
+        amountsStableToVol,
+        amountVolEstimated,
+        amountStableEstimated,
+        amountStableSwappedIntoEstimated,
+      } = await estimateDeposit(amountStableInit)
+
+      const tx = await pair.deposit(
+        amountStableInit,
+        amountVolZapMin,
+        {
+          amountStableMin,
+          amountVolMin,
+          deadline: noDeadline,
+          pathStableToVol: [dai.address, weth.address],
+          pathVolToStable: [weth.address, dai.address],
+          swapAmountOutMin,
+        },
+        owner.address,
+        referrer.address
+      )
+      const receipt = await tx.wait()
+
+      const { amountStable, amountUniLp, amountVol } = getDepositEvent(receipt)
+
+      // factory, pair, cTokens, owner
+      expect(amountVol).to.equal(amountVolEstimated)
+      expect(amountStable).to.equal(amountStableEstimated)
+      expect(wethBalanceBefore).to.equal(await weth.balanceOf(owner.address))
+      expect(amountStable.add(amountStableInit.div(2))).to.equal(
+        daiBalanceBefore.sub(await dai.balanceOf(owner.address))
+      )
+      // Stable
+      expect(await dai.balanceOf(factory.address)).to.equal(0)
+      expect(await dai.balanceOf(pair.address)).to.equal(0)
+      expect(await dai.balanceOf(owner.address)).to.equal(
+        daiBalanceBefore.sub(amountStable).sub(amountsStableToVol[0])
+      )
+      // It's off by 1 wei, not sure why, very likely a rounding error somewhere in hardhat/js
+      equalTol(
+        await cStable.callStatic.balanceOfUnderlying(pair.address),
+        amountStableSwappedIntoEstimated
+      )
+      // Volatile
+      expect(await weth.balanceOf(factory.address)).to.equal(0)
+      expect(await weth.balanceOf(pair.address)).to.equal(0)
+      expect(await weth.balanceOf(owner.address)).to.equal(wethBalanceBefore)
+      expect(await cVol.callStatic.borrowBalanceCurrent(pair.address)).to.equal(
+        amountVol
+      )
+      // Uniswap LP token
+      expect(
+        await cUniLp.callStatic.balanceOfUnderlying(pair.address)
+      ).to.equal(amountUniLp)
+      // AutoHedge LP token
+      expect(await pair.balanceOf(factory.address)).to.equal(0)
+      expect(await pair.balanceOf(pair.address)).to.equal(MINIMUM_LIQUIDITY)
+      const liquidity = (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
+        MINIMUM_LIQUIDITY
+      )
+      const liqudityFee = liquidity.mul(3).div(10000) // 0.03% fee
+      expect(await pair.balanceOf(owner.address)).to.equal(
+        liquidity.sub(liqudityFee)
+      )
+      expect(await pair.balanceOf(referrer.address)).to.equal(liqudityFee)
     })
   })
 
@@ -648,42 +761,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const wethBalanceBefore = await weth.balanceOf(owner.address)
       const daiBalanceBefore = await dai.balanceOf(owner.address)
 
-      let uniEstimateSnapshot = await snapshot()
-
-      const amountsStableToVol = await uniV2Router.getAmountsOut(
-        amountStableInit.div(2),
-        [dai.address, weth.address]
-      )
-
-      const amountVolEstimated = amountsStableToVol[1]
-      await uniV2Router.swapExactTokensForTokens(
-        amountStableInit.sub(amountsStableToVol[0]),
-        1,
-        [dai.address, weth.address],
-        owner.address,
-        TEN_18
-      )
-      const amountStableEstimated = amountVolEstimated
-        .mul(await dai.balanceOf(UNIV2_DAI_ETH_ADDR))
-        .div(await weth.balanceOf(UNIV2_DAI_ETH_ADDR))
-      await uniV2Router.addLiquidity(
-        dai.address,
-        weth.address,
-        amountStableEstimated,
-        amountVolEstimated,
-        1,
-        1,
-        owner.address,
-        TEN_18
-      )
-      const amountStableSwappedIntoEstimated = (
-        await uniV2Router.getAmountsOut(amountVolEstimated, [
-          weth.address,
-          dai.address,
-        ])
-      )[1]
-
-      await revertSnapshot(uniEstimateSnapshot)
+      const { amountsStableToVol, amountStableSwappedIntoEstimated } =
+        await estimateDeposit(amountStableInit)
 
       let tx = await pair.deposit(
         amountStableInit,
@@ -696,18 +775,19 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
           pathVolToStable: [weth.address, dai.address],
           swapAmountOutMin,
         },
-        owner.address
+        owner.address,
+        constants.AddressZero
       )
 
       let receipt = await tx.wait()
-      const depositedEvent = receipt.events?.pop()
-      const args = depositedEvent?.args ?? defaultDepositEvent
 
-      const { amountStable, amountUniLp, amountVol } = args
+      const { amountStable, amountUniLp, amountVol } = getDepositEvent(receipt)
 
-      const ownerLiquidityBalance = (
+      const liquidityTotal = (
         await mockSqrt.sqrt(amountVol.mul(amountStable))
       ).sub(MINIMUM_LIQUIDITY)
+      const liqudityFee = liquidityTotal.mul(3).div(10000)
+      const ownerLiquidityBalance = liquidityTotal.sub(liqudityFee)
 
       // Amount of volatile token to be repaid is lower than the amount to be withdrawn if we lower WETH price
       await lowerWETHPrice()
@@ -808,7 +888,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         ownerLiquidityBalance
       )
       expect(await pair.totalSupply()).to.equal(
-        BigNumber.from(MINIMUM_LIQUIDITY).add(ownerLiquidityBalance)
+        BigNumber.from(MINIMUM_LIQUIDITY).add(liquidityTotal)
       )
 
       tx = await pair.withdraw(liquidity, {
@@ -859,42 +939,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const wethBalanceBefore = await weth.balanceOf(owner.address)
       const daiBalanceBefore = await dai.balanceOf(owner.address)
 
-      let uniEstimateSnapshot = await snapshot()
-
-      const amountsStableToVol = await uniV2Router.getAmountsOut(
-        amountStableInit.div(2),
-        [dai.address, weth.address]
-      )
-
-      const amountVolEstimated = amountsStableToVol[1]
-      await uniV2Router.swapExactTokensForTokens(
-        amountStableInit.sub(amountsStableToVol[0]),
-        1,
-        [dai.address, weth.address],
-        owner.address,
-        TEN_18
-      )
-      const amountStableEstimated = amountVolEstimated
-        .mul(await dai.balanceOf(UNIV2_DAI_ETH_ADDR))
-        .div(await weth.balanceOf(UNIV2_DAI_ETH_ADDR))
-      await uniV2Router.addLiquidity(
-        dai.address,
-        weth.address,
-        amountStableEstimated,
-        amountVolEstimated,
-        1,
-        1,
-        owner.address,
-        TEN_18
-      )
-      const amountStableSwappedIntoEstimated = (
-        await uniV2Router.getAmountsOut(amountVolEstimated, [
-          weth.address,
-          dai.address,
-        ])
-      )[1]
-
-      await revertSnapshot(uniEstimateSnapshot)
+      const { amountsStableToVol, amountStableSwappedIntoEstimated } =
+        await estimateDeposit(amountStableInit)
 
       let tx = await pair.deposit(
         amountStableInit,
@@ -907,18 +953,19 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
           pathVolToStable: [weth.address, dai.address],
           swapAmountOutMin,
         },
-        owner.address
+        owner.address,
+        constants.AddressZero
       )
 
       let receipt = await tx.wait()
-      const depositedEvent = receipt.events?.pop()
-      const args = depositedEvent?.args ?? defaultDepositEvent
 
-      const { amountStable, amountUniLp, amountVol } = args
+      const { amountStable, amountUniLp, amountVol } = getDepositEvent(receipt)
 
-      const ownerLiquidityBalance = (
+      const liquidityTotal = (
         await mockSqrt.sqrt(amountVol.mul(amountStable))
       ).sub(MINIMUM_LIQUIDITY)
+      const liqudityFee = liquidityTotal.mul(3).div(10000)
+      const ownerLiquidityBalance = liquidityTotal.sub(liqudityFee)
 
       // Amount of volatile token to be repaid is lower than the amount to be withdrawn if we lower WETH price
       await raiseWETHPrice()
@@ -990,7 +1037,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         ownerLiquidityBalance
       )
       expect(await pair.totalSupply()).to.equal(
-        BigNumber.from(MINIMUM_LIQUIDITY).add(ownerLiquidityBalance)
+        BigNumber.from(MINIMUM_LIQUIDITY).add(liquidityTotal)
       )
 
       const underlyingStableBalance =
@@ -1091,195 +1138,168 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     })
   })
 
-  it("Should rebalance, borrow more ETH, no fee", async function () {
-    const amountStableInit = parseEther(String(1.1 * ethPrice * 2)) // fuse min borrow amount is 1 ETH, and half is kept as DAI
-    const amountVolZapMin = parseEther("1")
-    const amountStableMin = 0
-    const amountVolMin = 0
-    const swapAmountOutMin = 0
+  describe("rebalance()", () => {
+    it("Should rebalance, borrow more ETH, no fee", async () => {
+      const amountStableInit = parseEther(String(1.1 * ethPrice * 2)) // fuse min borrow amount is 1 ETH, and half is kept as DAI
+      const amountVolZapMin = parseEther("1")
+      const amountStableMin = 0
+      const amountVolMin = 0
+      const swapAmountOutMin = 0
 
-    const wethBalanceBefore = await weth.balanceOf(owner.address)
-    const daiBalanceBefore = await dai.balanceOf(owner.address)
+      const wethBalanceBefore = await weth.balanceOf(owner.address)
+      const daiBalanceBefore = await dai.balanceOf(owner.address)
 
-    // To estimate the amount LP'd on Uniswap with, we need to know what the reserves of the pair is, which is
-    // altered before LPing because we trade stable to vol in the same pair probably, so need to make the trade
-    // 1st to measure the reserves after
-    const testSnapshotId2 = await snapshot()
+      const {
+        amountsStableToVol,
+        amountVolEstimated,
+        amountStableEstimated,
+        amountStableSwappedIntoEstimated,
+      } = await estimateDeposit(amountStableInit)
 
-    await dai.approve(uniV2Router.address, amountStableInit)
-    await weth.approve(uniV2Router.address, amountStableInit)
-    const amountsStableToVol = await uniV2Router.getAmountsOut(
-      amountStableInit.div(2),
-      [dai.address, weth.address]
-    )
-    const amountVolEstimated = amountsStableToVol[1]
-    await uniV2Router.swapExactTokensForTokens(
-      amountStableInit.sub(amountsStableToVol[0]),
-      1,
-      [dai.address, weth.address],
-      owner.address,
-      TEN_18
-    )
-    const amountStableEstimated = amountVolEstimated
-      .mul(await dai.balanceOf(UNIV2_DAI_ETH_ADDR))
-      .div(await weth.balanceOf(UNIV2_DAI_ETH_ADDR))
-    await uniV2Router.addLiquidity(
-      dai.address,
-      weth.address,
-      amountStableEstimated,
-      amountVolEstimated,
-      1,
-      1,
-      owner.address,
-      TEN_18
-    )
-    const amountStableSwappedIntoEstimated = (
-      await uniV2Router.getAmountsOut(amountVolEstimated, [
-        weth.address,
-        dai.address,
-      ])
-    )[1]
+      const tx = await pair.deposit(
+        amountStableInit,
+        amountVolZapMin,
+        {
+          amountStableMin,
+          amountVolMin,
+          deadline: noDeadline,
+          pathStableToVol: [dai.address, weth.address],
+          pathVolToStable: [weth.address, dai.address],
+          swapAmountOutMin,
+        },
+        owner.address,
+        constants.AddressZero
+      )
+      const receipt = await tx.wait()
 
-    await revertSnapshot(testSnapshotId2)
+      const { amountStable, amountUniLp, amountVol } = getDepositEvent(receipt)
 
-    const tx = await pair.deposit(
-      amountStableInit,
-      amountVolZapMin,
-      {
-        amountStableMin,
-        amountVolMin,
-        deadline: noDeadline,
-        pathStableToVol: [dai.address, weth.address],
-        pathVolToStable: [weth.address, dai.address],
-        swapAmountOutMin,
-      },
-      owner.address
-    )
-    const receipt = await tx.wait()
-    const depositedEvent = receipt.events?.pop()
-    const args = depositedEvent?.args ?? defaultDepositEvent
-
-    const { amountStable, amountUniLp, amountVol } = args
-
-    // factory, pair, cTokens, owner
-    expect(amountVol).to.equal(amountVolEstimated)
-    expect(amountStable).to.equal(amountStableEstimated)
-    expect(wethBalanceBefore).to.equal(await weth.balanceOf(owner.address))
-    expect(amountStable.add(amountStableInit.div(2))).to.equal(
-      daiBalanceBefore.sub(await dai.balanceOf(owner.address))
-    )
-    // Stable
-    expect(await dai.balanceOf(factory.address)).to.equal(0)
-    expect(await dai.balanceOf(pair.address)).to.equal(0)
-    expect(await dai.balanceOf(owner.address)).to.equal(
-      daiBalanceBefore.sub(amountStable).sub(amountsStableToVol[0])
-    )
-    // It's off by 1 wei, not sure why, very likely a rounding error somewhere in hardhat/js
-    equalTol(
-      await cStable.callStatic.balanceOfUnderlying(pair.address),
-      amountStableSwappedIntoEstimated
-    )
-    // Volatile
-    expect(await weth.balanceOf(factory.address)).to.equal(0)
-    expect(await weth.balanceOf(pair.address)).to.equal(0)
-    expect(await weth.balanceOf(owner.address)).to.equal(wethBalanceBefore)
-    expect(await cVol.callStatic.borrowBalanceCurrent(pair.address)).to.equal(
-      amountVol
-    )
-    // Uniswap LP token
-    expect(await uniLp.balanceOf(factory.address)).to.equal(0)
-    expect(await uniLp.balanceOf(pair.address)).to.equal(0)
-    expect(await uniLp.balanceOf(owner.address)).to.equal(0)
-    expect(await cUniLp.callStatic.balanceOfUnderlying(pair.address)).to.equal(
-      amountUniLp
-    )
-    // AutoHedge LP token
-    expect(await pair.balanceOf(factory.address)).to.equal(0)
-    expect(await pair.balanceOf(pair.address)).to.equal(MINIMUM_LIQUIDITY)
-    const ownerLiquidityBalance = (
-      await mockSqrt.sqrt(amountVol.mul(amountStable))
-    ).sub(MINIMUM_LIQUIDITY)
-    expect(await pair.balanceOf(owner.address)).to.equal(ownerLiquidityBalance)
-
-    // Should revert when trying to rebalance when it's not needed
-    await expect(pair.rebalance()).to.be.revertedWith(REV_MSG_WITHIN_RANGE)
-
-    // Increase the amount of ETH held in the DEX
-    const wethInUniBeforeTrade = await weth.balanceOf(UNIV2_DAI_ETH_ADDR)
-    const amountWethSell = parseEther("1000")
-    await weth.connect(bob).approve(uniV2Router.address, amountWethSell)
-    await uniV2Router
-      .connect(bob)
-      .swapExactTokensForTokens(
-        amountWethSell,
-        1,
-        [weth.address, dai.address],
-        bob.address,
-        TEN_18
+      // factory, pair, cTokens, owner
+      expect(amountVol).to.equal(amountVolEstimated)
+      expect(amountStable).to.equal(amountStableEstimated)
+      expect(wethBalanceBefore).to.equal(await weth.balanceOf(owner.address))
+      expect(amountStable.add(amountStableInit.div(2))).to.equal(
+        daiBalanceBefore.sub(await dai.balanceOf(owner.address))
+      )
+      // Stable
+      expect(await dai.balanceOf(factory.address)).to.equal(0)
+      expect(await dai.balanceOf(pair.address)).to.equal(0)
+      expect(await dai.balanceOf(owner.address)).to.equal(
+        daiBalanceBefore.sub(amountStable).sub(amountsStableToVol[0])
+      )
+      // It's off by 1 wei, not sure why, very likely a rounding error somewhere in hardhat/js
+      equalTol(
+        await cStable.callStatic.balanceOfUnderlying(pair.address),
+        amountStableSwappedIntoEstimated
+      )
+      // Volatile
+      expect(await weth.balanceOf(factory.address)).to.equal(0)
+      expect(await weth.balanceOf(pair.address)).to.equal(0)
+      expect(await weth.balanceOf(owner.address)).to.equal(wethBalanceBefore)
+      expect(await cVol.callStatic.borrowBalanceCurrent(pair.address)).to.equal(
+        amountVol
+      )
+      // Uniswap LP token
+      expect(await uniLp.balanceOf(factory.address)).to.equal(0)
+      expect(await uniLp.balanceOf(pair.address)).to.equal(0)
+      expect(await uniLp.balanceOf(owner.address)).to.equal(0)
+      expect(
+        await cUniLp.callStatic.balanceOfUnderlying(pair.address)
+      ).to.equal(amountUniLp)
+      // AutoHedge LP token
+      expect(await pair.balanceOf(factory.address)).to.equal(0)
+      expect(await pair.balanceOf(pair.address)).to.equal(MINIMUM_LIQUIDITY)
+      const liquidityTotal = (
+        await mockSqrt.sqrt(amountVol.mul(amountStable))
+      ).sub(MINIMUM_LIQUIDITY)
+      const liqudityFee = liquidityTotal.mul(3).div(10000)
+      const ownerLiquidityBalance = liquidityTotal.sub(liqudityFee)
+      expect(await pair.balanceOf(owner.address)).to.equal(
+        ownerLiquidityBalance
       )
 
-    const wethInUniAfterTrade = await weth.balanceOf(UNIV2_DAI_ETH_ADDR)
-    const { amountVolOwned, amountVolDebt, debtBps } =
-      await pair.callStatic.getDebtBps()
+      // Should revert when trying to rebalance when it's not needed
+      await expect(pair.rebalance()).to.be.revertedWith(REV_MSG_WITHIN_RANGE)
 
-    expect(wethInUniAfterTrade).gt(wethInUniBeforeTrade)
-    const uniLpTotalSupply = await uniLp.totalSupply()
-    const ahUniLpOwned = await cUniLp.callStatic.balanceOfUnderlying(
-      pair.address
-    )
-    expect(amountVolOwned).equal(
-      wethInUniAfterTrade.mul(ahUniLpOwned).div(uniLpTotalSupply)
-    )
-    expect(amountVolDebt).equal(
-      await cVol.callStatic.borrowBalanceCurrent(pair.address)
-    )
-    expect(debtBps).equal(amountVolDebt.mul(TEN_18).div(amountVolOwned))
+      // Increase the amount of ETH held in the DEX
+      const wethInUniBeforeTrade = await weth.balanceOf(UNIV2_DAI_ETH_ADDR)
+      const amountWethSell = parseEther("1000")
+      await weth.connect(bob).approve(uniV2Router.address, amountWethSell)
+      await uniV2Router
+        .connect(bob)
+        .swapExactTokensForTokens(
+          amountWethSell,
+          1,
+          [weth.address, dai.address],
+          bob.address,
+          TEN_18
+        )
 
-    const estStableFromVol = (
-      await uniV2Router.getAmountsOut(amountVolOwned.sub(amountVolDebt), [
-        weth.address,
-        dai.address,
-      ])
-    )[1]
+      const wethInUniAfterTrade = await weth.balanceOf(UNIV2_DAI_ETH_ADDR)
+      const { amountVolOwned, amountVolDebt, debtBps } =
+        await pair.callStatic.getDebtBps()
 
-    await pair.rebalance()
+      expect(wethInUniAfterTrade).gt(wethInUniBeforeTrade)
+      const uniLpTotalSupply = await uniLp.totalSupply()
+      const ahUniLpOwned = await cUniLp.callStatic.balanceOfUnderlying(
+        pair.address
+      )
+      expect(amountVolOwned).equal(
+        wethInUniAfterTrade.mul(ahUniLpOwned).div(uniLpTotalSupply)
+      )
+      expect(amountVolDebt).equal(
+        await cVol.callStatic.borrowBalanceCurrent(pair.address)
+      )
+      expect(debtBps).equal(amountVolDebt.mul(TEN_18).div(amountVolOwned))
 
-    // factory, pair, cTokens, owner
-    // Stable
-    expect(await dai.balanceOf(factory.address)).to.equal(0)
-    expect(await dai.balanceOf(pair.address)).to.equal(0)
-    expect(await dai.balanceOf(owner.address)).to.equal(
-      daiBalanceBefore.sub(amountStable).sub(amountsStableToVol[0])
-    )
-    equalTol(
-      await cStable.callStatic.balanceOfUnderlying(pair.address),
-      amountStableSwappedIntoEstimated.add(estStableFromVol)
-    )
+      const estStableFromVol = (
+        await uniV2Router.getAmountsOut(amountVolOwned.sub(amountVolDebt), [
+          weth.address,
+          dai.address,
+        ])
+      )[1]
 
-    // Volatile
-    expect(await weth.balanceOf(factory.address)).to.equal(0)
-    expect(await weth.balanceOf(pair.address)).to.equal(0)
-    expect(await weth.balanceOf(owner.address)).to.equal(wethBalanceBefore)
-    equalTol(
-      await cVol.callStatic.borrowBalanceCurrent(pair.address),
-      wethInUniAfterTrade.mul(ahUniLpOwned).div(uniLpTotalSupply)
-    )
+      await pair.rebalance()
 
-    // Uniswap LP token
-    expect(await uniLp.balanceOf(factory.address)).to.equal(0)
-    expect(await uniLp.balanceOf(pair.address)).to.equal(0)
-    expect(await uniLp.balanceOf(owner.address)).to.equal(0)
-    expect(await cUniLp.callStatic.balanceOfUnderlying(pair.address)).to.equal(
-      amountUniLp
-    )
+      // factory, pair, cTokens, owner
+      // Stable
+      expect(await dai.balanceOf(factory.address)).to.equal(0)
+      expect(await dai.balanceOf(pair.address)).to.equal(0)
+      expect(await dai.balanceOf(owner.address)).to.equal(
+        daiBalanceBefore.sub(amountStable).sub(amountsStableToVol[0])
+      )
+      equalTol(
+        await cStable.callStatic.balanceOfUnderlying(pair.address),
+        amountStableSwappedIntoEstimated.add(estStableFromVol)
+      )
 
-    // AutoHedge LP token
-    expect(await pair.balanceOf(factory.address)).to.equal(0)
-    expect(await pair.balanceOf(pair.address)).to.equal(MINIMUM_LIQUIDITY)
-    expect(await pair.balanceOf(owner.address)).to.equal(ownerLiquidityBalance)
-    expect(await pair.totalSupply()).to.equal(
-      ethers.BigNumber.from(MINIMUM_LIQUIDITY).add(ownerLiquidityBalance)
-    )
+      // Volatile
+      expect(await weth.balanceOf(factory.address)).to.equal(0)
+      expect(await weth.balanceOf(pair.address)).to.equal(0)
+      expect(await weth.balanceOf(owner.address)).to.equal(wethBalanceBefore)
+      equalTol(
+        await cVol.callStatic.borrowBalanceCurrent(pair.address),
+        wethInUniAfterTrade.mul(ahUniLpOwned).div(uniLpTotalSupply)
+      )
+
+      // Uniswap LP token
+      expect(await uniLp.balanceOf(factory.address)).to.equal(0)
+      expect(await uniLp.balanceOf(pair.address)).to.equal(0)
+      expect(await uniLp.balanceOf(owner.address)).to.equal(0)
+      expect(
+        await cUniLp.callStatic.balanceOfUnderlying(pair.address)
+      ).to.equal(amountUniLp)
+
+      // AutoHedge LP token
+      expect(await pair.balanceOf(factory.address)).to.equal(0)
+      expect(await pair.balanceOf(pair.address)).to.equal(MINIMUM_LIQUIDITY)
+      expect(await pair.balanceOf(owner.address)).to.equal(
+        ownerLiquidityBalance
+      )
+      expect(await pair.totalSupply()).to.equal(
+        ethers.BigNumber.from(MINIMUM_LIQUIDITY).add(liquidityTotal)
+      )
+    })
   })
 
   // TODO: test rebalance with a fee

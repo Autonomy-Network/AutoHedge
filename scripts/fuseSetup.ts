@@ -1,4 +1,4 @@
-import hre, { ethers, network } from "hardhat"
+import hre, { artifacts, ethers } from "hardhat"
 import fs from "fs"
 import { expect } from "chai"
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
@@ -218,7 +218,11 @@ async function setupFunds() {
 
 async function deployAutonomy() {
   const po = await (
-    await ethers.getContractFactory("PriceOracle")
+    await ethers.getContractFactoryFromArtifact(
+      await artifacts.readArtifact(
+        "contracts/autonomy/PriceOracle.sol:PriceOracle"
+      )
+    )
   ).deploy(parseEther("2000"), ethers.BigNumber.from(5000000000))
   const o = await (
     await ethers.getContractFactory("Oracle")
