@@ -343,8 +343,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         require(msg.sender == userFeeVeriForwarder, "LimitsStops: not userFeeForw");
     }
 
-    function rebalance() public nonReentrant {
-        _rebalance(0);
+    function rebalance(uint feeAmount) public nonReentrant {
+        _rebalance(feeAmount);
     }
 
     // TODO: need to account for when there isn't enough stablecoins being lent out to repay
@@ -355,12 +355,12 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         (uint amountVolOwned, uint amountVolDebt, uint debtBps) = _getDebtBps(_tokens);
         // If there's ETH in this contract, then it's for the purpose of subsidising the
         // automation fee, and so we don't need to get funds from elsewhere to pay it
-        bool payFeeFromBal = feeAmount >= address(this).balance;
+        bool payFeeFromBal = feeAmount <= address(this).balance;
         address[] memory pathStableToVol = newPath(_tokens.stable, _tokens.vol);
         address[] memory pathVolToStable = newPath(_tokens.vol, _tokens.stable);
         MmBps memory mb = mmBps;
 
-
+        uint code;
         if (debtBps >= mb.max) {
             // Repay some debt
             uint amountVolToRepay = amountVolDebt - amountVolOwned;
@@ -381,7 +381,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
                 uniV2Router.swapTokensForExactTokens(amountVolToRepay + feeAmount, amountStableToRedeem, pathStableToVol, address(this), block.timestamp);
 
                 // Repay the debt
-                _tokens.cVol.repayBorrow(amountVolToRepay);
+                code = _tokens.cVol.repayBorrow(amountVolToRepay);
+                require(code == 0, string(abi.encodePacked("DNPair: fuse vol repay ", Strings.toString(code))));
 
                 // Pay `feeAmount`
                 IWETH(address(weth)).withdraw(feeAmount);
@@ -396,10 +397,12 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
                     amountStableToRedeem += uniV2Router.getAmountsIn(feeAmount, pathFee)[0];
                 }
 
-                _tokens.cStable.redeem(amountStableToRedeem);
+                code = _tokens.cStable.redeem(amountStableToRedeem);
+                require(code == 0, string(abi.encodePacked("DNPair: fuse vol redeem ", Strings.toString(code))));
 
                 uniV2Router.swapTokensForExactTokens(amountVolToRepay, amountStableForDebt, pathStableToVol, address(this), block.timestamp);
-                _tokens.cVol.repayBorrow(amountVolToRepay);
+                code = _tokens.cVol.repayBorrow(amountVolToRepay);
+                require(code == 0, string(abi.encodePacked("DNPair: fuse vol repay ", Strings.toString(code))));
 
                 if (feeAmount > 0 && !payFeeFromBal) {
                     uniV2Router.swapTokensForExactETH(feeAmount, amountStableToRedeem-amountStableForDebt, pathFee, registry, block.timestamp);
@@ -409,7 +412,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         } else if (debtBps <= mb.min) {
             // Borrow more
             uint amountVolBorrowed = amountVolOwned - amountVolDebt;
-            _tokens.cVol.borrow(amountVolBorrowed);
+            code = _tokens.cVol.borrow(amountVolBorrowed);
+            require(code == 0, string(abi.encodePacked("DNPair: fuse borrow ", Strings.toString(code))));
             // First swap everything to the stablecoin and then swap the `feeAmount` to ETH,
             // rather than swapping to ETH first, because if the volatile is WETH/ETH, then swapping
             // WETH/ETH to ETH would error in Uniswap
@@ -434,7 +438,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
                 )[0];
             }
             
-            _tokens.cStable.mint(amountStableToLend);
+            code = _tokens.cStable.mint(amountStableToLend);
+            require(code == 0, string(abi.encodePacked("DNPair: fuse stable mint ", Strings.toString(code))));
         } else {
             require(false, "DNPair: debt within range");
         }
