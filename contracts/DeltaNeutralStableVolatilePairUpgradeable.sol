@@ -26,7 +26,30 @@ import "hardhat/console.sol";
 * @notice   TODO
 * @author   Quantaf1re (James Key)
 */
-contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatilePairUpgradeable, Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UniswapV2ERC20Upgradeable {
+contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatilePairUpgradeable, Initializable, ReentrancyGuardUpgradeable, UniswapV2ERC20Upgradeable {
+    using SafeERC20 for IERC20Metadata;
+
+    uint private constant MINIMUM_LIQUIDITY = 10**3;
+    uint private constant BASE_FACTOR = 1e18;
+    uint private constant MAX_UINT = type(uint256).max;
+
+    address payable public registry;
+    address public userFeeVeriForwarder;
+
+    IUniswapV2Router02 public uniV2Router;
+
+    Tokens public tokens;
+    IERC20Metadata public weth;
+
+
+    MmBps public mmBps;
+
+    IDeltaNeutralStableVolatileFactory dnFactory;
+    // TODO put most of the above vars into a struct so it can be tightly packed to save gas when reading
+
+    // TODO add checks on the return values of all Compound fncs for error msgs and revert if not 0, with the code in the revert reason
+
+
     function initialize(
         IUniswapV2Router02 uniV2Router_,
         Tokens memory tokens_,
@@ -36,9 +59,9 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         IRegistry registry_,
         address userFeeVeriForwarder_,
         MmBps memory mmBps_,
-        IComptroller _comptroller
+        IComptroller _comptroller,
+        IDeltaNeutralStableVolatileFactory dnFactory_
     ) public override initializer {
-        __Ownable_init_unchained();
         __UniswapV2ERC20Upgradeable__init_unchained(name_, symbol_);
 
         uniV2Router = uniV2Router_;
@@ -47,6 +70,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         registry = registry_;
         userFeeVeriForwarder = userFeeVeriForwarder_;
         mmBps = mmBps_;
+        dnFactory = dnFactory_;
 
         tokens_.stable.safeApprove(address(uniV2Router), MAX_UINT);
         tokens_.stable.safeApprove(address(tokens_.cStable), MAX_UINT);
@@ -73,24 +97,6 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             true
         );
     }
-
-
-    using SafeERC20 for IERC20Metadata;
-
-    uint private constant MINIMUM_LIQUIDITY = 10**3;
-    uint private constant BASE_FACTOR = 1e18;
-    uint private constant MAX_UINT = type(uint256).max;
-
-    IRegistry public registry;
-    address public userFeeVeriForwarder;
-    uint public autoId;
-
-    IUniswapV2Router02 public uniV2Router;
-
-    Tokens public tokens;
-    IERC20Metadata public weth;
-
-    MmBps public mmBps;
 
 
     function deposit(
@@ -154,7 +160,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         address feeReceiver = referrer;
 
         if (feeReceiver == address(0)) {
-            feeReceiver = IDeltaNeutralStableVolatileFactory(owner()).feeReceiver();
+            feeReceiver = dnFactory.feeReceiver();
         }
         
         // Mint AutoHedge LP tokens to the user. Need to do this after LPing so we know the exact amount of
@@ -511,7 +517,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         }
         require(liquidity > 0, 'DNPair: invalid liquidity mint');
 
-        liquidityFee = liquidity * IDeltaNeutralStableVolatileFactory(owner()).depositFee() / BASE_FACTOR;
+        liquidityFee = liquidity * dnFactory.depositFee() / BASE_FACTOR;
         liquidityForUser = liquidity - liquidityFee;
 
         _mint(feeReceiver, liquidityFee);
