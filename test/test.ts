@@ -690,6 +690,106 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       )
       expect(await pair.balanceOf(referrer.address)).to.equal(liqudityFee)
     })
+
+    it("Should deposit correctly after `depositFee` and `feeReceiver` values are updated", async () => {
+      const wethPrice = await getWETHPrice()
+
+      const amountStableInit = parseEther(String(1.1 * wethPrice * 2)) // fuse min borrow amount is 1 ETH, and half is kept as DAI
+      const amountVolZapMin = parseEther("1")
+      const amountStableMin = 0
+      const amountVolMin = 0
+      const swapAmountOutMin = 0
+
+      const wethBalanceBefore = await weth.balanceOf(owner.address)
+      const daiBalanceBefore = await dai.balanceOf(owner.address)
+
+      // Update deposit fee and fee receiver
+
+      // Set deposit fee as 1%
+      const newDepositFee = BigNumber.from(TEN_18).div(100)
+      await expect(factory.setDepositFee(newDepositFee))
+        .to.emit(factory, "DepositFeeSet")
+        .withArgs(newDepositFee)
+
+      expect(await factory.depositFee()).to.equal(newDepositFee)
+
+      // Set referrer as new fee receiver
+      await expect(factory.setFeeReceiver(referrer.address))
+        .to.emit(factory, "FeeReceiverSet")
+        .withArgs(referrer.address)
+
+      expect(await factory.feeReceiver()).to.equal(referrer.address)
+
+      // To estimate the amount LP'd on Uniswap with, we need to know what the reserves of the pair is, which is
+      // altered before LPing because we trade stable to vol in the same pair probably, so need to make the trade
+      // 1st to measure the reserves after
+
+      const {
+        amountsStableToVol,
+        amountVolEstimated,
+        amountStableEstimated,
+        amountStableSwappedIntoEstimated,
+      } = await estimateDeposit(amountStableInit)
+
+      const tx = await pair.deposit(
+        amountStableInit,
+        amountVolZapMin,
+        {
+          amountStableMin,
+          amountVolMin,
+          deadline: noDeadline,
+          pathStableToVol: [dai.address, weth.address],
+          pathVolToStable: [weth.address, dai.address],
+          swapAmountOutMin,
+        },
+        owner.address,
+        constants.AddressZero
+      )
+      const receipt = await tx.wait()
+
+      const { amountStable, amountUniLp, amountVol } = getDepositEvent(receipt)
+
+      // factory, pair, cTokens, owner
+      expect(amountVol).to.equal(amountVolEstimated)
+      expect(amountStable).to.equal(amountStableEstimated)
+      expect(wethBalanceBefore).to.equal(await weth.balanceOf(owner.address))
+      expect(amountStable.add(amountStableInit.div(2))).to.equal(
+        daiBalanceBefore.sub(await dai.balanceOf(owner.address))
+      )
+      // Stable
+      expect(await dai.balanceOf(factory.address)).to.equal(0)
+      expect(await dai.balanceOf(pair.address)).to.equal(0)
+      expect(await dai.balanceOf(owner.address)).to.equal(
+        daiBalanceBefore.sub(amountStable).sub(amountsStableToVol[0])
+      )
+      // It's off by 1 wei, not sure why, very likely a rounding error somewhere in hardhat/js
+      equalTol(
+        await cStable.callStatic.balanceOfUnderlying(pair.address),
+        amountStableSwappedIntoEstimated
+      )
+      // Volatile
+      expect(await weth.balanceOf(factory.address)).to.equal(0)
+      expect(await weth.balanceOf(pair.address)).to.equal(0)
+      expect(await weth.balanceOf(owner.address)).to.equal(wethBalanceBefore)
+      expect(await cVol.callStatic.borrowBalanceCurrent(pair.address)).to.equal(
+        amountVol
+      )
+      // Uniswap LP token
+      expect(
+        await cUniLp.callStatic.balanceOfUnderlying(pair.address)
+      ).to.equal(amountUniLp)
+      // AutoHedge LP token
+      expect(await pair.balanceOf(factory.address)).to.equal(0)
+      expect(await pair.balanceOf(pair.address)).to.equal(MINIMUM_LIQUIDITY)
+      const liquidity = (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
+        MINIMUM_LIQUIDITY
+      )
+      const liqudityFee = liquidity.mul(newDepositFee).div(TEN_18)
+      expect(await pair.balanceOf(owner.address)).to.equal(
+        liquidity.sub(liqudityFee)
+      )
+      expect(await pair.balanceOf(referrer.address)).to.equal(liqudityFee)
+    })
   })
 
   describe("withdraw()", () => {

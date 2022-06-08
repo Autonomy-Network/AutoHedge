@@ -56,6 +56,9 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         feeReceiver = feeReceiver_;
         // initial deposit fee is 0.3%
         depositFee = 3e15;
+
+        emit FeeReceiverSet(feeReceiver);
+        emit DepositFeeSet(depositFee);
     }
 
 
@@ -117,9 +120,9 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
             registry,
             userFeeVeriForwarder,
             initMmBps,
-            comptroller
+            comptroller,
+            address(this)
         );
-        console.log(string(data));
 		pair = address(new TProxy(
             logic,
             admin,
@@ -153,10 +156,12 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
     function setFeeReceiver(address newReceiver) external override onlyOwner {
         require(newReceiver != address(0), "DNFac: zero address");
         feeReceiver = newReceiver;
+        emit FeeReceiverSet(feeReceiver);
     }
 
     function setDepositFee(uint newDepositFee) external override onlyOwner {
         require(newDepositFee > 0 && newDepositFee < 1 ether, "DNFac: invalid deposit fee");
         depositFee = newDepositFee;
+        emit DepositFeeSet(depositFee);
     }
 }

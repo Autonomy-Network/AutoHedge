@@ -9,6 +9,8 @@ import "./IComptroller.sol";
 
 interface IDeltaNeutralStableVolatileFactory {
     event PairCreated(IERC20Metadata indexed stable, IERC20Metadata indexed vol, address pair, uint);
+    event FeeReceiverSet(address indexed receiver);
+    event DepositFeeSet(uint fee);
 
     function getPair(IERC20Metadata stable, IERC20Metadata vol) external view returns (address pair);
     function allPairs(uint) external view returns (address pair);

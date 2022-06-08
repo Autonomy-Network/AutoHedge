@@ -25,44 +25,7 @@ import "hardhat/console.sol";
 * @notice   TODO
 * @author   Quantaf1re (James Key)
 */
-contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatilePairUpgradeable, Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UniswapV2ERC20Upgradeable {
-    function initialize(
-        IUniswapV2Router02 uniV2Router_,
-        Tokens memory tokens_,
-        IERC20Metadata weth_,
-        string memory name_,
-        string memory symbol_,
-        address payable registry_,
-        address userFeeVeriForwarder_,
-        MmBps memory mmBps_,
-        IComptroller _comptroller
-    ) public override initializer {
-        __Ownable_init_unchained();
-        __UniswapV2ERC20Upgradeable__init_unchained(name_, symbol_);
-
-        uniV2Router = uniV2Router_;
-        tokens = tokens_;
-        weth = weth_;
-        registry = registry_;
-        userFeeVeriForwarder = userFeeVeriForwarder_;
-        mmBps = mmBps_;
-
-        tokens_.stable.safeApprove(address(uniV2Router), MAX_UINT);
-        tokens_.stable.safeApprove(address(tokens_.cStable), MAX_UINT);
-        tokens_.vol.safeApprove(address(uniV2Router), MAX_UINT);
-        tokens_.vol.safeApprove(address(tokens_.cVol), MAX_UINT);
-        tokens_.uniLp.safeApprove(address(uniV2Router), MAX_UINT);
-        tokens_.uniLp.safeApprove(address(tokens_.cUniLp), MAX_UINT);
-
-        address[] memory cTokens = new address[](3);
-        cTokens[0] = address(tokens_.cStable);
-        cTokens[1] = address(tokens_.cVol);
-        cTokens[2] = address(tokens_.cUniLp);
-        uint[] memory results = _comptroller.enterMarkets(cTokens);
-        require(results[0] == 0 && results[1] == 0 && results[2] == 0, "DNPair: unable to enter markets");
-    }
-
-
+contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatilePairUpgradeable, Initializable, ReentrancyGuardUpgradeable, UniswapV2ERC20Upgradeable {
     using SafeERC20 for IERC20Metadata;
 
     uint private constant MINIMUM_LIQUIDITY = 10**3;
@@ -79,9 +42,49 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
 
 
     MmBps public mmBps;
+
+    IDeltaNeutralStableVolatileFactory dnFactory;
     // TODO put most of the above vars into a struct so it can be tightly packed to save gas when reading
 
     // TODO add checks on the return values of all Compound fncs for error msgs and revert if not 0, with the code in the revert reason
+
+
+    function initialize(
+        IUniswapV2Router02 uniV2Router_,
+        Tokens memory tokens_,
+        IERC20Metadata weth_,
+        string memory name_,
+        string memory symbol_,
+        address payable registry_,
+        address userFeeVeriForwarder_,
+        MmBps memory mmBps_,
+        IComptroller _comptroller,
+        IDeltaNeutralStableVolatileFactory dnFactory_
+    ) public override initializer {
+        __UniswapV2ERC20Upgradeable__init_unchained(name_, symbol_);
+
+        uniV2Router = uniV2Router_;
+        tokens = tokens_;
+        weth = weth_;
+        registry = registry_;
+        userFeeVeriForwarder = userFeeVeriForwarder_;
+        mmBps = mmBps_;
+        dnFactory = dnFactory_;
+
+        tokens_.stable.safeApprove(address(uniV2Router), MAX_UINT);
+        tokens_.stable.safeApprove(address(tokens_.cStable), MAX_UINT);
+        tokens_.vol.safeApprove(address(uniV2Router), MAX_UINT);
+        tokens_.vol.safeApprove(address(tokens_.cVol), MAX_UINT);
+        tokens_.uniLp.safeApprove(address(uniV2Router), MAX_UINT);
+        tokens_.uniLp.safeApprove(address(tokens_.cUniLp), MAX_UINT);
+
+        address[] memory cTokens = new address[](3);
+        cTokens[0] = address(tokens_.cStable);
+        cTokens[1] = address(tokens_.cVol);
+        cTokens[2] = address(tokens_.cUniLp);
+        uint[] memory results = _comptroller.enterMarkets(cTokens);
+        require(results[0] == 0 && results[1] == 0 && results[2] == 0, "DNPair: unable to enter markets");
+    }
 
 
     function deposit(
@@ -145,7 +148,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         address feeReceiver = referrer;
 
         if (feeReceiver == address(0)) {
-            feeReceiver = IDeltaNeutralStableVolatileFactory(owner()).feeReceiver();
+            feeReceiver = dnFactory.feeReceiver();
         }
         
         // Mint AutoHedge LP tokens to the user. Need to do this after LPing so we know the exact amount of
@@ -502,7 +505,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         }
         require(liquidity > 0, 'DNPair: invalid liquidity mint');
 
-        liquidityFee = liquidity * IDeltaNeutralStableVolatileFactory(owner()).depositFee() / BASE_FACTOR;
+        liquidityFee = liquidity * dnFactory.depositFee() / BASE_FACTOR;
         liquidityForUser = liquidity - liquidityFee;
 
         _mint(feeReceiver, liquidityFee);
