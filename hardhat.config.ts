@@ -39,12 +39,12 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
-    hardhat: {
-      forking: {
-        enabled: true,
-        url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
-      },
-    },
+    // hardhat: {
+    //   forking: {
+    //     enabled: true,
+    //     url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_API_KEY}`,
+    //   },
+    // },
     mainnet: {
       url: `https://mainnet.infura.io/v3/${process.env.ALCHEMY_API_KEY}`,
       accounts: [`${process.env.DEPLOYER_PRIV}`],
