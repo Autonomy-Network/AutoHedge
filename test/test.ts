@@ -2,7 +2,7 @@ import { ethers } from "hardhat"
 import { expect } from "chai"
 import { UniswapV2Router02, WETH } from "typechain/thirdparty"
 import {
-  DeltaNeutralStableVolatileFactory,
+  DeltaNeutralStableVolatileFactoryUpgradeable,
   DeltaNeutralStableVolatilePairUpgradeable,
   ICErc20,
   IERC20,
@@ -71,7 +71,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
   let dai: IERC20
   let uniV2Router: UniswapV2Router02
 
-  let factory: DeltaNeutralStableVolatileFactory
+  let factory: DeltaNeutralStableVolatileFactoryUpgradeable
   let pair: DeltaNeutralStableVolatilePairUpgradeable
 
   const UNIV2_DAI_ETH_ADDR = "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"
@@ -173,9 +173,10 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     const MockSqrtFactory = await ethers.getContractFactory("MockSqrt")
     const TProxyAdminFactory = await ethers.getContractFactory("TProxyAdmin")
     const TProxy = await ethers.getContractFactory("TProxy")
-    const DeltaNeutralStableVolatileFactory = await ethers.getContractFactory(
-      "DeltaNeutralStableVolatileFactory"
-    )
+    const DeltaNeutralStableVolatileFactoryUpgradeable =
+      await ethers.getContractFactory(
+        "DeltaNeutralStableVolatileFactoryUpgradeable"
+      )
     const DeltaNeutralStableVolatilePairUpgradeableFactory =
       await ethers.getContractFactory(
         "DeltaNeutralStableVolatilePairUpgradeable"
@@ -186,22 +187,24 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     pairImpl = <DeltaNeutralStableVolatilePairUpgradeable>(
       await DeltaNeutralStableVolatilePairUpgradeableFactory.deploy()
     )
-    factory = <DeltaNeutralStableVolatileFactory>(
-      await DeltaNeutralStableVolatileFactory.deploy(
-        pairImpl.address,
-        admin.address,
-        weth.address,
-        UNIV2_FACTORY_ADDR,
-        UniswapV2Router02Abi.address,
-        addresses.unitroller,
-        "0x0000000000000000000000000000000000000000",
-        "0x0000000000000000000000000000000000000000",
-        {
-          min: parseEther("0.99"),
-          max: parseEther("1.01"),
-        },
-        feeReceiver.address
-      )
+    factory = <DeltaNeutralStableVolatileFactoryUpgradeable>(
+      await DeltaNeutralStableVolatileFactoryUpgradeable.deploy()
+    )
+
+    await factory.initialize(
+      pairImpl.address,
+      admin.address,
+      weth.address,
+      UNIV2_FACTORY_ADDR,
+      UniswapV2Router02Abi.address,
+      addresses.unitroller,
+      "0x0000000000000000000000000000000000000000",
+      "0x0000000000000000000000000000000000000000",
+      {
+        min: parseEther("0.99"),
+        max: parseEther("1.01"),
+      },
+      feeReceiver.address
     )
 
     const tx = await factory.createPair(dai.address, weth.address)

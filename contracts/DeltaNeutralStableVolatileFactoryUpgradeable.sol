@@ -1,8 +1,9 @@
 pragma solidity 0.8.6;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-import "../interfaces/IDeltaNeutralStableVolatileFactory.sol";
+import "../interfaces/IDeltaNeutralStableVolatileFactoryUpgradeable.sol";
 import "../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
 import "../interfaces/IERC20Symbol.sol";
 import "../interfaces/IUniswapV2Factory.sol";
@@ -13,7 +14,7 @@ import "./TProxy.sol";
 import "hardhat/console.sol";
 
 
-contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory, Ownable {
+contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVolatileFactoryUpgradeable, Initializable, OwnableUpgradeable {
 
 //    address constant _ETH_ADDRESS_ = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE; TODO
 
@@ -32,7 +33,7 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
     address public override feeReceiver;
     uint public override depositFee;
 
-    constructor(
+    function initialize(
         address logic_,
         address admin_,
         address weth_,
@@ -43,7 +44,9 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         address userFeeVeriForwarder_,
         IDeltaNeutralStableVolatilePairUpgradeable.MmBps memory initMmBps_,
         address feeReceiver_
-    ) {
+    ) public override initializer {
+        __Ownable_init_unchained();
+
         logic = logic_;
         admin = admin_;
         weth = weth_;
@@ -123,23 +126,11 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
             comptroller,
             address(this)
         );
-		pair = address(new TProxy(
+        pair = address(new TProxy{salt: salt}(
             logic,
             admin,
             data
         ));
-        // pair = address(new DeltaNeutralStableVolatilePair{salt: salt}(
-        //     uniV2Factory,
-        //     uniV2Router,
-        //     stable,
-        //     vol,
-        //     string(abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)),
-        //     string(abi.encodePacked("AUTOH-", token0Symbol, "-", token1Symbol)),
-        //     registry,
-        //     userFeeVeriForwarder,
-        //     initMmBps,
-        //     comptroller
-        // ));
 
         // Housekeeping
         // Don't want to save the reverse ordering because we don't want to sort the

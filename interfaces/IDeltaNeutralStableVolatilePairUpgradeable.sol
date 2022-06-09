@@ -6,7 +6,7 @@ import "./IUniswapV2Factory.sol";
 import "./IUniswapV2Router02.sol";
 import "./IComptroller.sol";
 import "./ICErc20.sol";
-import "./IDeltaNeutralStableVolatileFactory.sol";
+import "./IDeltaNeutralStableVolatileFactoryUpgradeable.sol";
 
 
 interface IDeltaNeutralStableVolatilePairUpgradeable {
@@ -52,7 +52,7 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
         address userFeeVeriForwarder_,
         MmBps memory mmBps_,
         IComptroller _comptroller,
-        IDeltaNeutralStableVolatileFactory dnFactory_
+        IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory_
     ) external;
     
     function deposit(

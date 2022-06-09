@@ -12,7 +12,7 @@ import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IComptroller.sol";
 import "../interfaces/ICErc20.sol";
 import "../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
-import "../interfaces/IDeltaNeutralStableVolatileFactory.sol";
+import "../interfaces/IDeltaNeutralStableVolatileFactoryUpgradeable.sol";
 import "../interfaces/IWETH.sol";
 import "./UniswapV2ERC20Upgradeable.sol";
 import "./Maths.sol";
@@ -43,7 +43,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
 
     MmBps public mmBps;
 
-    IDeltaNeutralStableVolatileFactory dnFactory;
+    IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory;
     // TODO put most of the above vars into a struct so it can be tightly packed to save gas when reading
 
     // TODO add checks on the return values of all Compound fncs for error msgs and revert if not 0, with the code in the revert reason
@@ -59,7 +59,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         address userFeeVeriForwarder_,
         MmBps memory mmBps_,
         IComptroller _comptroller,
-        IDeltaNeutralStableVolatileFactory dnFactory_
+        IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory_
     ) public override initializer {
         __UniswapV2ERC20Upgradeable__init_unchained(name_, symbol_);
 
