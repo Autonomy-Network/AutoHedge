@@ -57,7 +57,7 @@ const config: HardhatUserConfig = {
     apiKey: `${process.env.ETHERSCAN_TOKEN}`,
   },
   mocha: {
-    timeout: 120000,
+    timeout: 200000,
   },
   typechain: {
     outDir: "typechain",
