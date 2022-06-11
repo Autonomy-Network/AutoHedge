@@ -1,7 +1,6 @@
 import hre, { ethers, network } from "hardhat"
 import fs from "fs"
 import { expect } from "chai"
-import { ContractInterface } from "ethers"
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
 import { ICErc20, IERC20 } from "typechain"
 import type {
@@ -12,7 +11,7 @@ import type {
   MasterPriceOracle,
   InitializableClones,
 } from "typechain/thirdparty"
-import { getEthPrice } from "./utils"
+import { ArtifactType, getEthPrice, snapshot } from "./utils"
 
 import WETHAbi from "../thirdparty/WETH.json"
 import DAI from "../thirdparty/DAI.json"
@@ -41,6 +40,7 @@ let ethPrice
 let owner: SignerWithAddress
 let bob: SignerWithAddress
 let alice: SignerWithAddress
+let priceCoordinator: SignerWithAddress
 
 let weth: WETH
 let dai: IERC20
@@ -60,11 +60,6 @@ let cStable
 let cUniLp
 
 let reg
-
-type ArtifactType = {
-  address: string
-  abi: ContractInterface
-}
 
 const c = (artifact: ArtifactType) =>
   new ethers.Contract(artifact.address, artifact.abi, owner)
@@ -189,9 +184,11 @@ async function setupFunds() {
   await weth.deposit({ value: amount })
   await weth.connect(alice).deposit({ value: amount })
   await weth.connect(bob).deposit({ value: amount })
+  await weth.connect(priceCoordinator).deposit({ value: amount })
   expect(await weth.balanceOf(owner.address)).to.equal(amount)
   expect(await weth.balanceOf(alice.address)).to.equal(amount)
   expect(await weth.balanceOf(bob.address)).to.equal(amount)
+  expect(await weth.balanceOf(priceCoordinator.address)).to.equal(amount)
 
   // get dai
   amount = parseEther("1000000")
@@ -204,9 +201,11 @@ async function setupFunds() {
   await dai.connect(daiWhale).transfer(owner.address, amount)
   await dai.connect(daiWhale).transfer(alice.address, amount)
   await dai.connect(daiWhale).transfer(bob.address, amount)
+  await dai.connect(daiWhale).transfer(priceCoordinator.address, amount)
   expect(await dai.balanceOf(owner.address)).to.equal(amount)
   expect(await dai.balanceOf(alice.address)).to.equal(amount)
   expect(await dai.balanceOf(bob.address)).to.equal(amount)
+  expect(await dai.balanceOf(priceCoordinator.address)).to.equal(amount)
 
   // deposit volatile to fuse
   amount = parseEther("1000")
@@ -250,7 +249,7 @@ async function deployAutonomy() {
 }
 
 async function main() {
-  ;[owner, bob, alice] = await ethers.getSigners()
+  ;[owner, bob, alice, priceCoordinator] = await ethers.getSigners()
 
   let fuseAdminAddr = "0x5eA4A9a7592683bF0Bc187d6Da706c6c4770976F"
   await owner.sendTransaction({
@@ -315,9 +314,7 @@ async function main() {
 
   const reg = await deployAutonomy()
 
-  const snapshotId = await network.provider.request({
-    method: "evm_snapshot",
-  })
+  const snapshotId = await snapshot()
 
   const addresses = {
     snapshotId,
