@@ -3,7 +3,7 @@ pragma solidity 0.8.6;
 
 import "./CToken.sol";
 
-interface PriceOracle {
+interface ICompoundPriceOracle {
     /**
       * @notice Get the underlying price of a cToken asset
       * @param cToken The cToken to get the underlying price of

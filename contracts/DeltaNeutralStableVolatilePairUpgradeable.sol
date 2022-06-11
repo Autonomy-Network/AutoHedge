@@ -515,5 +515,24 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         return path;
     }
 
+    function getTokens() external view override returns (
+        IERC20Metadata stable,
+        ICErc20 cStable,
+        IERC20Metadata vol,
+        ICErc20 cVol,
+        IERC20Metadata uniLp,
+        ICErc20 cUniLp
+    ) {
+        Tokens memory _tokens = tokens;
+        return (
+            _tokens.stable,
+            _tokens.cStable,
+            _tokens.vol,
+            _tokens.cVol,
+            _tokens.uniLp,
+            _tokens.cUniLp
+        );
+    }
+
     receive() external payable {}
 }

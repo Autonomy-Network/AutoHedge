@@ -77,4 +77,13 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
     function getDebtBps() external returns (VolPosition memory);
 
     function setMmBps(MmBps calldata newMmBps) external;
+
+    function getTokens() external view returns (
+        IERC20Metadata stable,
+        ICErc20 cStable,
+        IERC20Metadata vol,
+        ICErc20 cVol,
+        IERC20Metadata uniLp,
+        ICErc20 cUniLp
+    );
 }

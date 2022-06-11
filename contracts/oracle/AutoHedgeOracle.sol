@@ -4,13 +4,11 @@ pragma solidity 0.8.6;
 import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 
-import "../external/compound/PriceOracle.sol";
+import "../external/compound/ICompoundPriceOracle.sol";
 import "../external/compound/CToken.sol";
 import "../external/compound/CErc20.sol";
 
-import "../external/uniswap/IUniswapV2Pair.sol";
-
-import "./BasePriceOracle.sol";
+import "./ICompoundBasePriceOracle.sol";
 
 import "../../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
 import "../../contracts/DeltaNeutralStableVolatilePairUpgradeable.sol";
@@ -20,14 +18,14 @@ import "../../contracts/DeltaNeutralStableVolatilePairUpgradeable.sol";
  * @title UniswapLpTokenPriceOracle
  * @author David Lucid <david@rari.capital> (https://github.com/davidlucid)
  * @notice UniswapLpTokenPriceOracle is a price oracle for Uniswap (and SushiSwap) LP tokens.
- * @dev Implements the `PriceOracle` interface used by Fuse pools (and Compound v2).
+ * @dev Implements the `ICompoundPriceOracle` interface used by Fuse pools (and Compound v2).
  */
-contract UniswapLpTokenPriceOracle is PriceOracle {
+contract UniswapLpTokenPriceOracle is ICompoundPriceOracle {
     using SafeMathUpgradeable for uint256;
 
     address public immutable weth;
 
-    constructor(address _weth) public {
+    constructor(address _weth) {
         weth = _weth;
     }
 
@@ -42,7 +40,7 @@ contract UniswapLpTokenPriceOracle is PriceOracle {
 
     /**
      * @notice Returns the price in ETH of the token underlying `cToken`.
-     * @dev Implements the `PriceOracle` interface for Fuse pools (and Compound v2).
+     * @dev Implements the `ICompoundPriceOracle` interface for Fuse pools (and Compound v2).
      * @return Price in ETH of the token underlying `cToken`, scaled by `10 ** (36 - underlyingDecimals)`.
      */
     function getUnderlyingPrice(CToken cToken) external override returns (uint) {
@@ -56,15 +54,15 @@ contract UniswapLpTokenPriceOracle is PriceOracle {
      * @dev Fetches the fair LP token/ETH price from Uniswap, with 18 decimals of precision.
      */
     function _price(address token) internal virtual returns (uint) {
-        DeltaNeutralStableVolatilePairUpgradeable pair = DeltaNeutralStableVolatilePairUpgradeable(token);
+        IDeltaNeutralStableVolatilePairUpgradeable pair = IDeltaNeutralStableVolatilePairUpgradeable(token);
 
-        (IERC20Metadata stable,,IERC20Metadata volatile, ICErc20 cVol,IERC20Metadata uniLp, ICErc20 cUniLp) = pair.tokens();
+        (IERC20Metadata stable,,IERC20Metadata volatile, ICErc20 cVol,IERC20Metadata uniLp, ICErc20 cUniLp) = pair.getTokens();
 
         // get the prices of the volatile and the stable
-        uint stablePriceInEth = address(stable) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(stable)).mul(1e18).div(10 ** uint256(stable.decimals()));
-        uint volatilePriceInEth = address(volatile) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(volatile)).mul(1e18).div(10 ** uint256(volatile.decimals()));
+        uint stablePriceInEth = address(stable) == weth ? 1e18 : ICompoundBasePriceOracle(msg.sender).price(address(stable)).mul(1e18).div(10 ** uint256(stable.decimals()));
+        uint volatilePriceInEth = address(volatile) == weth ? 1e18 : ICompoundBasePriceOracle(msg.sender).price(address(volatile)).mul(1e18).div(10 ** uint256(volatile.decimals()));
     
-        uint uniLpPriceInEth = address(uniLp) == weth ? 1e18 : BasePriceOracle(msg.sender).price(address(uniLp)).mul(1e18).div(10 ** uint256(uniLp.decimals()));
+        uint uniLpPriceInEth = address(uniLp) == weth ? 1e18 : ICompoundBasePriceOracle(msg.sender).price(address(uniLp)).mul(1e18).div(10 ** uint256(uniLp.decimals()));
 
         // convert that to the amounts of stable and volatile the pool owns
         // uint uniLpValueInEth = cUniLp.balanceOfUnderlying(token) * uniLpPriceInEth; // TODO check if it's this line or the one bellow
