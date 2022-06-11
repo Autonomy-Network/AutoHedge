@@ -388,20 +388,12 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             // required amount of volatile tokens
             if (_tokens.vol == weth) {
                 // Get enough WETH
-<<<<<<< HEAD
                 uint amountVolNeeded = !payFeeFromBal ? amountVolToRepay + feeAmount : amountVolToRepay;
                 amountStableToRedeem = uniV2Router.getAmountsIn(amountVolNeeded, pathStableToVol)[0];
                 code = _tokens.cStable.redeemUnderlying(amountStableToRedeem);
                 require(code == 0, string(abi.encodePacked("DNPair: fuse redeem underlying ", Strings.toString(code))));
                 uniV2Router.swapTokensForExactTokens(
                     amountVolNeeded,
-=======
-                amountStableToRedeem = uniV2Router.getAmountsIn(amountVolToRepay + feeAmount, pathStableToVol)[0];
-                code = _tokens.cStable.redeemUnderlying(amountStableToRedeem);
-                require(code == 0, string(abi.encodePacked("DNPair: fuse redeem underlying ", Strings.toString(code))));
-                uniV2Router.swapTokensForExactTokens(
-                    amountVolToRepay + feeAmount,
->>>>>>> master
                     amountStableToRedeem,
                     pathStableToVol,
                     address(this),
@@ -470,11 +462,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         }
 
         if (feeAmount > 0) {
-<<<<<<< HEAD
             payable(address(registry)).transfer(feeAmount);
-=======
-            registry.transfer(feeAmount);
->>>>>>> master
         }
 
         volPos = _getDebtBps(_tokens);
