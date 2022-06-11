@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.6;
 
-import "../external/compound/PriceOracle.sol";
+import "../external/compound/ICompoundPriceOracle.sol";
 
 /**
- * @title BasePriceOracle
+ * @title ICompoundBasePriceOracle
  * @notice Returns prices of underlying tokens directly without the caller having to specify a cToken address.
- * @dev Implements the `PriceOracle` interface.
+ * @dev Implements the `ICompoundPriceOracle` interface.
  * @author David Lucid <david@rari.capital> (https://github.com/davidlucid)
  */
-interface BasePriceOracle is PriceOracle {
+interface ICompoundBasePriceOracle is ICompoundPriceOracle {
     /**
      * @notice Get the price of an underlying asset.
      * @param underlying The underlying asset to get the price of.

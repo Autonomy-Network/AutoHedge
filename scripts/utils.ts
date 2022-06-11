@@ -15,6 +15,7 @@ export type UnitrollerSnapshot = {
   snapshotId: string
   unitroller: string
   reg: string
+  uff: string
 }
 
 export function getAddresses(): UnitrollerSnapshot {
