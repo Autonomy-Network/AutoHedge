@@ -15,6 +15,8 @@ import { ArtifactType, getEthPrice, snapshot } from "./utils"
 
 import WETHAbi from "../thirdparty/WETH.json"
 import DAI from "../thirdparty/DAI.json"
+import UNI from "../thirdparty/UNI.json"
+import USDC from "../thirdparty/USDC.json"
 import UniswapV2Router02 from "../thirdparty/UniswapV2Router02.json"
 import InitializableClonesAbi from "../thirdparty/InitializableClones.json"
 import MasterPriceOracleAbi from "../thirdparty/MasterPriceOracle.json"
@@ -28,6 +30,7 @@ import ICErc20Abi from "../artifacts/interfaces/ICErc20.sol/ICErc20.json"
 const { Interface, parseEther } = ethers.utils
 
 const UNIV2_DAI_ETH_ADDR = "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"
+const UNIV2_USDC_UNI_ADDR= "0xEBFb684dD2b01E698ca6c14F10e4f289934a54D6"
 
 const FUSE_DEFAULT_ORACLE_ADDR = "0x1887118E49e0F4A78Bd71B792a49dE03504A764D"
 const COMPTROLLER_IMPL_ADDR = "0xe16db319d9da7ce40b666dd2e365a4b8b3c18217"
@@ -44,6 +47,8 @@ let priceCoordinator: SignerWithAddress
 
 let weth: WETH
 let dai: IERC20
+let uni: IERC20
+let usdc: IERC20
 
 let uniRouter
 
@@ -125,7 +130,15 @@ async function deployMarkets() {
   const fuseOracle = await (
     await ethers.getContractFactory("FuseOracle")
   ).deploy() // TODO
+  console.log(await masterPriceOracle.price(dai.address))
+  console.log(await masterPriceOracle.price(weth.address))
+  console.log(await masterPriceOracle.price(usdc.address))
+  console.log(await masterPriceOracle.price(uni.address))
+  // console.log(await masterPriceOracle.price(UNIV2_DAI_ETH_ADDR))
   await masterPriceOracle.add([UNIV2_DAI_ETH_ADDR], [fuseOracle.address])
+  await masterPriceOracle.add([UNIV2_USDC_UNI_ADDR], [fuseOracle.address])
+  console.log('aaa')
+  console.log(await fuseLens.getPoolAssetsWithData(unitroller.address))
   await unitroller._deployMarket(
     false,
     ethers.utils.defaultAbiCoder.encode(constructorTypes, [
@@ -141,6 +154,8 @@ async function deployMarkets() {
     ]),
     collateralFactorMantissa
   )
+  console.log('a')
+  console.log(await fuseLens.getPoolAssetsWithData(unitroller.address))
   await unitroller._deployMarket(
     false,
     ethers.utils.defaultAbiCoder.encode(constructorTypes, [
@@ -156,14 +171,16 @@ async function deployMarkets() {
     ]),
     collateralFactorMantissa
   )
+  console.log('b')
+  console.log(await fuseLens.getPoolAssetsWithData(unitroller.address))
   await unitroller._deployMarket(
     false,
     ethers.utils.defaultAbiCoder.encode(constructorTypes, [
       weth.address,
       unitroller.address,
       JUMP_RATE_MODEL_ADDR,
-      "Test0 Ethereum", // TODO
-      "fETH-185", // TODO pool id
+      "Test0 WETH", // TODO
+      "fWETH-185", // TODO pool id
       CERC20_IMPLEMENTATION_ADDR,
       0x00,
       reserveFactor,
@@ -171,6 +188,93 @@ async function deployMarkets() {
     ]),
     collateralFactorMantissa
   )
+  console.log('c')
+  console.log(await fuseLens.getPoolAssetsWithData(unitroller.address))
+  console.log(await unitroller.callStatic._deployMarket(
+    false,
+    ethers.utils.defaultAbiCoder.encode(constructorTypes, [
+      usdc.address,
+      unitroller.address,
+      JUMP_RATE_MODEL_ADDR,
+      "Test0 USDC", // TODO
+      "fUSDC-185", // TODO pool id
+      CERC20_IMPLEMENTATION_ADDR,
+      0x00,
+      reserveFactor,
+      0,
+    ]),
+    collateralFactorMantissa
+  ))
+  await unitroller._deployMarket(
+    false,
+    ethers.utils.defaultAbiCoder.encode(constructorTypes, [
+      usdc.address,
+      unitroller.address,
+      JUMP_RATE_MODEL_ADDR,
+      "Test0 USDC", // TODO
+      "fUSDC-185", // TODO pool id
+      CERC20_IMPLEMENTATION_ADDR,
+      0x00,
+      reserveFactor,
+      0,
+    ]),
+    collateralFactorMantissa
+  )
+  // console.log('callStatic = ', await unitroller.callStatic._deployMarket(
+  //   false,
+  //   ethers.utils.defaultAbiCoder.encode(constructorTypes, [
+  //     UNIV2_USDC_UNI_ADDR,
+  //     unitroller.address,
+  //     JUMP_RATE_MODEL_UNI_ADDR,
+  //     "UniV2 USDC UNI LP", // TODO
+  //     "fUNI-USDC-UNI-185", // TODO pool id
+  //     CERC20_IMPLEMENTATION_ADDR,
+  //     0x00,
+  //     reserveFactor,
+  //     0,
+  //   ]),
+  //   collateralFactorMantissa
+  // ))
+  console.log('d')
+  console.log(await fuseLens.getPoolAssetsWithData(unitroller.address))
+  await unitroller._deployMarket(
+    false,
+    ethers.utils.defaultAbiCoder.encode(constructorTypes, [
+      uni.address,
+      unitroller.address,
+      JUMP_RATE_MODEL_ADDR,
+      "Test0 UNI", // TODO
+      "fUNI-185", // TODO pool id
+      CERC20_IMPLEMENTATION_ADDR,
+      0x00,
+      reserveFactor,
+      0,
+    ]),
+    collateralFactorMantissa
+  )
+  const tx = await unitroller._deployMarket(
+    false,
+    ethers.utils.defaultAbiCoder.encode(constructorTypes, [
+      UNIV2_USDC_UNI_ADDR,
+      unitroller.address,
+      JUMP_RATE_MODEL_UNI_ADDR,
+      "UniV2 USDC UNI LP", // TODO
+      "fUNI-USDC-UNI-185", // TODO pool id
+      CERC20_IMPLEMENTATION_ADDR,
+      0x00,
+      reserveFactor,
+      0,
+    ]),
+    collateralFactorMantissa
+  )
+  // console.log('derppp')
+  // console.log(tx)
+  // console.log('derppp2222')
+  // const receipt = await tx.wait()
+  // console.log(receipt)
+  console.log('e')
+  // console.log('callStatic2 = ', await fuseLens.callStatic.getPoolAssetsWithData(unitroller.address))
+  console.log(await fuseLens.getPoolAssetsWithData(unitroller.address))
 
   const assets = await fuseLens.getPoolAssetsWithData(unitroller.address)
   expect(assets[0]["underlyingSymbol"]).to.equal("DAI-WETH")
@@ -207,9 +311,48 @@ async function setupFunds() {
   expect(await dai.balanceOf(bob.address)).to.equal(amount)
   expect(await dai.balanceOf(priceCoordinator.address)).to.equal(amount)
 
-  // deposit volatile to fuse
+  // get UNI
+  amount = parseEther("1000000")
+  let uniWhaleAddress = "0x1a9C8182C09F50C8318d769245beA52c32BE35BC"
+  await hre.network.provider.request({
+    method: "hardhat_impersonateAccount",
+    params: [uniWhaleAddress],
+  })
+  const uniWhale = await ethers.provider.getSigner(uniWhaleAddress)
+  await uni.connect(uniWhale).transfer(owner.address, amount)
+  await uni.connect(uniWhale).transfer(alice.address, amount)
+  await uni.connect(uniWhale).transfer(bob.address, amount)
+  await uni.connect(uniWhale).transfer(priceCoordinator.address, amount)
+  expect(await uni.balanceOf(owner.address)).to.equal(amount)
+  expect(await uni.balanceOf(alice.address)).to.equal(amount)
+  expect(await uni.balanceOf(bob.address)).to.equal(amount)
+  expect(await uni.balanceOf(priceCoordinator.address)).to.equal(amount)
+
+  // get USDC
+  amount = parseEther("1000000")
+  let usdcWhaleAddress = "0x0A59649758aa4d66E25f08Dd01271e891fe52199"
+  await hre.network.provider.request({
+    method: "hardhat_impersonateAccount",
+    params: [usdcWhaleAddress],
+  })
+  const usdcWhale = await ethers.provider.getSigner(usdcWhaleAddress)
+  await usdc.connect(usdcWhale).transfer(owner.address, amount)
+  await usdc.connect(usdcWhale).transfer(alice.address, amount)
+  await usdc.connect(usdcWhale).transfer(bob.address, amount)
+  await usdc.connect(usdcWhale).transfer(priceCoordinator.address, amount)
+  expect(await usdc.balanceOf(owner.address)).to.equal(amount)
+  expect(await usdc.balanceOf(alice.address)).to.equal(amount)
+  expect(await usdc.balanceOf(bob.address)).to.equal(amount)
+  expect(await usdc.balanceOf(priceCoordinator.address)).to.equal(amount)
+
+  // deposit volatiles to fuse
   amount = parseEther("1000")
   await weth.approve(cVol.address, amount)
+  await cVol.mint(amount)
+  expect(await cVol.callStatic.balanceOfUnderlying(owner.address)).to.equal(
+    amount
+  )
+  await uni.approve(cVol.address, amount)
   await cVol.mint(amount)
   expect(await cVol.callStatic.balanceOfUnderlying(owner.address)).to.equal(
     amount
@@ -281,6 +424,8 @@ async function main() {
 
   weth = <WETH>c(WETHAbi)
   dai = <IERC20>c(DAI)
+  uni = <IERC20>c(UNI)
+  usdc = <IERC20>c(USDC)
 
   uniRouter = c(UniswapV2Router02)
 
