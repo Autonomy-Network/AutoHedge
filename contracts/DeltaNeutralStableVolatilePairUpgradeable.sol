@@ -33,8 +33,9 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
     uint private constant BASE_FACTOR = 1e18;
     uint private constant MAX_UINT = type(uint256).max;
 
-    address payable public registry;
+    IRegistry public registry;
     address public userFeeVeriForwarder;
+    uint public autoId;
 
     IUniswapV2Router02 public uniV2Router;
 
