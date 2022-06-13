@@ -27,29 +27,8 @@ import "hardhat/console.sol";
 * @author   Quantaf1re (James Key)
 */
 contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatilePairUpgradeable, Initializable, ReentrancyGuardUpgradeable, UniswapV2ERC20Upgradeable {
+    
     using SafeERC20 for IERC20Metadata;
-
-    uint private constant MINIMUM_LIQUIDITY = 10**3;
-    uint private constant BASE_FACTOR = 1e18;
-    uint private constant MAX_UINT = type(uint256).max;
-
-    IRegistry public registry;
-    address public userFeeVeriForwarder;
-    uint public autoId;
-
-    IUniswapV2Router02 public uniV2Router;
-
-    Tokens public tokens;
-    IERC20Metadata public weth;
-
-
-    MmBps public mmBps;
-
-    IDeltaNeutralStableVolatileFactory dnFactory;
-    // TODO put most of the above vars into a struct so it can be tightly packed to save gas when reading
-
-    // TODO add checks on the return values of all Compound fncs for error msgs and revert if not 0, with the code in the revert reason
-
 
     function initialize(
         IUniswapV2Router02 uniV2Router_,
@@ -98,6 +77,27 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             true
         );
     }
+
+    uint private constant MINIMUM_LIQUIDITY = 10**3;
+    uint private constant BASE_FACTOR = 1e18;
+    uint private constant MAX_UINT = type(uint256).max;
+
+    IRegistry public registry;
+    address public userFeeVeriForwarder;
+    uint public autoId;
+
+    IUniswapV2Router02 public uniV2Router;
+
+    Tokens public tokens;
+    IERC20Metadata public weth;
+
+
+    MmBps public mmBps;
+
+    IDeltaNeutralStableVolatileFactory dnFactory;
+    // TODO put most of the above vars into a struct so it can be tightly packed to save gas when reading
+
+    // TODO add checks on the return values of all Compound fncs for error msgs and revert if not 0, with the code in the revert reason
 
 
     function deposit(
