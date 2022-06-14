@@ -25,7 +25,7 @@ import "hardhat/console.sol";
 * @notice   TODO
 * @author   Quantaf1re (James Key)
 */
-contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatilePairUpgradeable, Initializable, ReentrancyGuardUpgradeable, UniswapV2ERC20Upgradeable {
+contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatilePairUpgradeable, Initializable, OwnableUpgradeable,ReentrancyGuardUpgradeable, UniswapV2ERC20Upgradeable {
     using SafeERC20 for IERC20Metadata;
 
     uint private constant MINIMUM_LIQUIDITY = 10**3;
@@ -61,6 +61,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         IComptroller _comptroller,
         IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory_
     ) public override initializer {
+        __Ownable_init_unchained();
         __UniswapV2ERC20Upgradeable__init_unchained(name_, symbol_);
 
         uniV2Router = uniV2Router_;
@@ -483,7 +484,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
     }
 
     // TODO: add owner
-    function setMmBps(MmBps calldata newMmBps) external override {
+    function setMmBps(MmBps calldata newMmBps) external override onlyOwner {
         mmBps = newMmBps;
     }
 

@@ -1412,6 +1412,31 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     })
   })
 
+  describe("setMmBps()", () => {
+    it("should revert if the caller is not the owner", async () => {
+      await expect(
+        pair.connect(alice).setMmBps({
+          min: BigNumber.from(0),
+          max: TEN_18.div(10),
+        })
+      ).to.be.revertedWith("Ownable: caller is not the owner")
+    })
+
+    it("should work as expected if caller is the owner", async () => {
+      const newMmBps = {
+        min: TEN_18.div(100),
+        max: TEN_18.div(20),
+      }
+
+      await pair.setMmBps(newMmBps)
+
+      const updatedMmBps = await pair.callStatic.mmBps()
+
+      expect(newMmBps.min).to.equal(updatedMmBps.min)
+      expect(newMmBps.max).to.equal(updatedMmBps.max)
+    })
+  })
+
   // TODO: test rebalance with a fee
   // TODO: test big rebalance value such that it's out of balance after rebalancing
   // TODO: test deposit with large enough deposit for the debt to be out of sync at the end

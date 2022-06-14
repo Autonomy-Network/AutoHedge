@@ -131,7 +131,7 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
             admin,
             data
         ));
-
+        OwnableUpgradeable(pair).transferOwnership(owner());
         // Housekeeping
         // Don't want to save the reverse ordering because we don't want to sort the
         // tokens. The tokens need to be inputed into `createPair` in the correct
