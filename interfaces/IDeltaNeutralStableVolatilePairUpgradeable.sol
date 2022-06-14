@@ -7,6 +7,7 @@ import "./IUniswapV2Router02.sol";
 import "./IComptroller.sol";
 import "./ICErc20.sol";
 import "./IDeltaNeutralStableVolatileFactoryUpgradeable.sol";
+import "./autonomy/IRegistry.sol";
 
 
 interface IDeltaNeutralStableVolatilePairUpgradeable {
@@ -30,6 +31,12 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
         uint64 max;
     }
 
+    struct VolPosition {
+        uint owned;
+        uint debt;
+        uint bps;
+    }
+
     struct Tokens {
         IERC20Metadata stable;
         ICErc20 cStable;
@@ -48,7 +55,7 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
         IERC20Metadata weth_,
         string memory name_,
         string memory symbol_,
-        address payable registry_,
+        IRegistry registry_,
         address userFeeVeriForwarder_,
         MmBps memory mmBps_,
         IComptroller _comptroller,
@@ -70,11 +77,19 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
 
     function rebalanceAuto(
         address user,
-        uint feeAmount,
-        uint maxGasPrice
+        uint feeAmount
     ) external;
 
-    function getDebtBps() external returns (uint ownedAmountVol, uint debtAmountVol, uint debtBps);
+    function getDebtBps() external returns (VolPosition memory);
 
     function setMmBps(MmBps calldata newMmBps) external;
+
+    function getTokens() external view returns (
+        IERC20Metadata stable,
+        ICErc20 cStable,
+        IERC20Metadata vol,
+        ICErc20 cVol,
+        IERC20Metadata uniLp,
+        ICErc20 cUniLp
+    );
 }

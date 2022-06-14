@@ -245,11 +245,13 @@ async function deployAutonomy() {
     "AUTO",
     parseEther("1000000000")
   )
+
+  await sm.setAUTO(await reg.getAUTOAddr())
   await uf.setCaller(reg.address, true)
   await ff.setCaller(reg.address, true)
   await uff.setCaller(reg.address, true)
 
-  return reg
+  return [reg, uff]
 }
 
 async function main() {
@@ -316,7 +318,7 @@ async function main() {
 
   await setupFunds()
 
-  const reg = await deployAutonomy()
+  const [reg, uff] = await deployAutonomy()
 
   const snapshotId = await snapshot()
 
@@ -324,6 +326,7 @@ async function main() {
     snapshotId,
     unitroller: unitroller.address,
     reg: reg.address,
+    uff: uff.address,
   }
   fs.writeFileSync("addresses.json", JSON.stringify(addresses))
 
