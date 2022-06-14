@@ -207,15 +207,14 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       UNIV2_FACTORY_ADDR,
       UniswapV2Router02Abi.address,
       addresses.unitroller,
-      "0x0000000000000000000000000000000000000000",
-      "0x0000000000000000000000000000000000000000",
+      addresses.reg,
+      addresses.uff,
       {
         min: parseEther("0.99"),
         max: parseEther("1.01"),
       },
       feeReceiver.address
     )
-    console.log("hey")
 
     const tx = await factory.createPair(dai.address, weth.address)
     const receipt = await tx.wait()
@@ -261,7 +260,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     await revertSnapshot(testSnapshotId)
   })
 
-  describe.only("deposit()", () => {
+  describe("deposit()", () => {
     it("Should deposit", async () => {
       const wethPrice = await getWETHPrice()
 
