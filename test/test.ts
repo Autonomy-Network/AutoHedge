@@ -8,6 +8,7 @@ import {
   IERC20,
   MockSqrt,
   TProxyAdmin,
+  UBeacon,
 } from "typechain"
 
 import {
@@ -171,8 +172,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
 
     // It's fucking dumb that BigNumber doesn't support sqrt operations -.- need to mock using the sqrt used in Solidity
     const MockSqrtFactory = await ethers.getContractFactory("MockSqrt")
-    const TProxyAdminFactory = await ethers.getContractFactory("TProxyAdmin")
-    const TProxy = await ethers.getContractFactory("TProxy")
+    const UBeaconFactory = await ethers.getContractFactory("UBeacon")
     const DeltaNeutralStableVolatileFactoryUpgradeable =
       await ethers.getContractFactory(
         "DeltaNeutralStableVolatileFactoryUpgradeable"
@@ -183,17 +183,17 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       )
 
     mockSqrt = <MockSqrt>await MockSqrtFactory.deploy()
-    admin = <TProxyAdmin>await TProxyAdminFactory.deploy()
     pairImpl = <DeltaNeutralStableVolatilePairUpgradeable>(
       await DeltaNeutralStableVolatilePairUpgradeableFactory.deploy()
     )
+    const beacon = <UBeacon>await UBeaconFactory.deploy(pairImpl.address)
+    console.log("UpgradeableBeacon: ", beacon.address)
     factory = <DeltaNeutralStableVolatileFactoryUpgradeable>(
       await DeltaNeutralStableVolatileFactoryUpgradeable.deploy()
     )
 
     await factory.initialize(
-      pairImpl.address,
-      admin.address,
+      beacon.address,
       weth.address,
       UNIV2_FACTORY_ADDR,
       UniswapV2Router02Abi.address,

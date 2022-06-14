@@ -14,8 +14,7 @@ interface IDeltaNeutralStableVolatileFactoryUpgradeable {
     event DepositFeeSet(uint fee);
 
     function initialize(
-        address logic_,
-        address admin_,
+        address beacon_,
         address weth_,
         IUniswapV2Factory uniV2Factory_,
         IUniswapV2Router02 uniV2Router_,

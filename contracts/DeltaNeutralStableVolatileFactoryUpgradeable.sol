@@ -2,6 +2,7 @@ pragma solidity 0.8.6;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 
 import "../interfaces/IDeltaNeutralStableVolatileFactoryUpgradeable.sol";
 import "../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
@@ -9,7 +10,6 @@ import "../interfaces/IERC20Symbol.sol";
 import "../interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IComptroller.sol";
-import "./TProxy.sol";
 
 import "hardhat/console.sol";
 
@@ -21,8 +21,7 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
     mapping(IERC20Metadata => mapping(IERC20Metadata => address)) public override getPair;
     address[] private _allPairs;
 
-    address public logic;
-    address public admin;
+    address public beacon;
     address public weth;
     IUniswapV2Factory public override uniV2Factory;
     IUniswapV2Router02 public override uniV2Router;
@@ -34,8 +33,7 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
     uint public override depositFee;
 
     function initialize(
-        address logic_,
-        address admin_,
+        address beacon_,
         address weth_,
         IUniswapV2Factory uniV2Factory_,
         IUniswapV2Router02 uniV2Router_,
@@ -47,8 +45,7 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
     ) public override initializer {
         __Ownable_init_unchained();
 
-        logic = logic_;
-        admin = admin_;
+        beacon = beacon_;
         weth = weth_;
         uniV2Factory = uniV2Factory_;
         uniV2Router = uniV2Router_;
@@ -126,11 +123,12 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
             comptroller,
             address(this)
         );
-        pair = address(new TProxy{salt: salt}(
-            logic,
-            admin,
-            data
-        ));
+        // pair = address(new TProxy{salt: salt}(
+        //     logic,
+        //     admin,
+        //     data
+        // ));
+        pair = address(new BeaconProxy{salt: salt}(beacon, data));
         OwnableUpgradeable(pair).transferOwnership(owner());
         // Housekeeping
         // Don't want to save the reverse ordering because we don't want to sort the
