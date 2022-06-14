@@ -1,4 +1,5 @@
 import { ethers } from "hardhat"
+import fs from "fs"
 import { expect } from "chai"
 import { UniswapV2Router02, WETH } from "typechain/thirdparty"
 import {
@@ -1338,7 +1339,9 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       )
 
       // Should revert when trying to rebalance when it's not needed
-      await expect(pair.rebalance()).to.be.revertedWith(REV_MSG_WITHIN_RANGE)
+      await expect(pair.rebalance(false)).to.be.revertedWith(
+        REV_MSG_WITHIN_RANGE
+      )
 
       // Increase the amount of ETH held in the DEX
       const wethInUniBeforeTrade = await weth.balanceOf(UNIV2_DAI_ETH_ADDR)
@@ -1355,8 +1358,11 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         )
 
       const wethInUniAfterTrade = await weth.balanceOf(UNIV2_DAI_ETH_ADDR)
-      const { amountVolOwned, amountVolDebt, debtBps } =
-        await pair.callStatic.getDebtBps()
+      const {
+        owned: amountVolOwned,
+        debt: amountVolDebt,
+        bps: debtBps,
+      } = await pair.callStatic.getDebtBps()
 
       expect(wethInUniAfterTrade).gt(wethInUniBeforeTrade)
       const uniLpTotalSupply = await uniLp.totalSupply()
@@ -1378,7 +1384,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         ])
       )[1]
 
-      await pair.rebalance()
+      await pair.rebalance(false)
 
       // factory, pair, cTokens, owner
       // Stable
@@ -1483,7 +1489,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         pathVolToStable: [weth.address, dai.address],
         swapAmountOutMin,
       },
-      owner.address
+      owner.address,
+      constants.AddressZero
     )
     const receipt = await tx.wait()
     const depositedEvent = receipt.events?.pop()
@@ -1529,7 +1536,13 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     const ownerLiquidityBalance = (
       await mockSqrt.sqrt(amountVol.mul(amountStable))
     ).sub(MINIMUM_LIQUIDITY)
-    expect(await pair.balanceOf(owner.address)).to.equal(ownerLiquidityBalance)
+    const liquidityFee = ownerLiquidityBalance
+      .mul(await factory.depositFee())
+      .div(TEN_18)
+
+    expect(await pair.balanceOf(owner.address)).to.equal(
+      ownerLiquidityBalance.sub(liquidityFee)
+    )
 
     // Should revert when trying to rebalance when it's not needed
     await expect(pair.rebalance(false)).to.be.revertedWith(REV_MSG_WITHIN_RANGE)
@@ -1706,7 +1719,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         pathVolToStable: [weth.address, dai.address],
         swapAmountOutMin,
       },
-      owner.address
+      owner.address,
+      constants.AddressZero
     )
     const receipt = await tx.wait()
     const depositedEvent = receipt.events?.pop()
@@ -1752,7 +1766,13 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     const ownerLiquidityBalance = (
       await mockSqrt.sqrt(amountVol.mul(amountStable))
     ).sub(MINIMUM_LIQUIDITY)
-    expect(await pair.balanceOf(owner.address)).to.equal(ownerLiquidityBalance)
+    const liquidityFee = ownerLiquidityBalance
+      .mul(await factory.depositFee())
+      .div(TEN_18)
+
+    expect(await pair.balanceOf(owner.address)).to.equal(
+      ownerLiquidityBalance.sub(liquidityFee)
+    )
 
     // Should revert when trying to rebalance when it's not needed
     await expect(pair.rebalance(false)).to.be.revertedWith(REV_MSG_WITHIN_RANGE)
@@ -1931,7 +1951,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         pathVolToStable: [weth.address, dai.address],
         swapAmountOutMin,
       },
-      owner.address
+      owner.address,
+      constants.AddressZero
     )
     const receipt = await tx.wait()
     const depositedEvent = receipt.events?.pop()
@@ -1977,7 +1998,13 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     const ownerLiquidityBalance = (
       await mockSqrt.sqrt(amountVol.mul(amountStable))
     ).sub(MINIMUM_LIQUIDITY)
-    expect(await pair.balanceOf(owner.address)).to.equal(ownerLiquidityBalance)
+    const liquidityFee = ownerLiquidityBalance
+      .mul(await factory.depositFee())
+      .div(TEN_18)
+
+    expect(await pair.balanceOf(owner.address)).to.equal(
+      ownerLiquidityBalance.sub(liquidityFee)
+    )
 
     // Should revert when trying to rebalance when it's not needed
     await expect(pair.rebalance(false)).to.be.revertedWith(REV_MSG_WITHIN_RANGE)
@@ -2154,7 +2181,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         pathVolToStable: [weth.address, dai.address],
         swapAmountOutMin,
       },
-      owner.address
+      owner.address,
+      constants.AddressZero
     )
     const receipt = await tx.wait()
     const depositedEvent = receipt.events?.pop()
@@ -2200,7 +2228,13 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     const ownerLiquidityBalance = (
       await mockSqrt.sqrt(amountVol.mul(amountStable))
     ).sub(MINIMUM_LIQUIDITY)
-    expect(await pair.balanceOf(owner.address)).to.equal(ownerLiquidityBalance)
+    const liquidityFee = ownerLiquidityBalance
+      .mul(await factory.depositFee())
+      .div(TEN_18)
+
+    expect(await pair.balanceOf(owner.address)).to.equal(
+      ownerLiquidityBalance.sub(liquidityFee)
+    )
 
     // Should revert when trying to rebalance when it's not needed
     await expect(pair.rebalance(false)).to.be.revertedWith(REV_MSG_WITHIN_RANGE)
