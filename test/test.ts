@@ -3,12 +3,12 @@ import fs from "fs"
 import { expect } from "chai"
 import { UniswapV2Router02, WETH } from "typechain/thirdparty"
 import {
-  DeltaNeutralStableVolatileFactory,
+  DeltaNeutralStableVolatileFactoryUpgradeable,
   DeltaNeutralStableVolatilePairUpgradeable,
   ICErc20,
   IERC20,
   MockSqrt,
-  TProxyAdmin,
+  UBeacon,
   Registry,
 } from "typechain"
 
@@ -77,7 +77,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
   let dai: IERC20
   let uniV2Router: UniswapV2Router02
 
-  let factory: DeltaNeutralStableVolatileFactory
+  let factory: DeltaNeutralStableVolatileFactoryUpgradeable
   let pair: DeltaNeutralStableVolatilePairUpgradeable
 
   const UNIV2_DAI_ETH_ADDR = "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"
@@ -92,7 +92,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
   let deploySnapshotId: string
   let testSnapshotId: string
 
-  let admin: TProxyAdmin
+  let beacon: UBeacon
   let pairImpl: DeltaNeutralStableVolatilePairUpgradeable
 
   let registry: Registry
@@ -180,11 +180,11 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
 
     // It's fucking dumb that BigNumber doesn't support sqrt operations -.- need to mock using the sqrt used in Solidity
     const MockSqrtFactory = await ethers.getContractFactory("MockSqrt")
-    const TProxyAdminFactory = await ethers.getContractFactory("TProxyAdmin")
-    const TProxy = await ethers.getContractFactory("TProxy")
-    const DeltaNeutralStableVolatileFactory = await ethers.getContractFactory(
-      "DeltaNeutralStableVolatileFactory"
-    )
+    const UBeaconFactory = await ethers.getContractFactory("UBeacon")
+    const DeltaNeutralStableVolatileFactoryUpgradeable =
+      await ethers.getContractFactory(
+        "DeltaNeutralStableVolatileFactoryUpgradeable"
+      )
     const DeltaNeutralStableVolatilePairUpgradeableFactory =
       await ethers.getContractFactory(
         "DeltaNeutralStableVolatilePairUpgradeable"
@@ -192,26 +192,28 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     const RegistryFactory = await ethers.getContractFactory("Registry")
 
     mockSqrt = <MockSqrt>await MockSqrtFactory.deploy()
-    admin = <TProxyAdmin>await TProxyAdminFactory.deploy()
     pairImpl = <DeltaNeutralStableVolatilePairUpgradeable>(
       await DeltaNeutralStableVolatilePairUpgradeableFactory.deploy()
     )
-    factory = <DeltaNeutralStableVolatileFactory>(
-      await DeltaNeutralStableVolatileFactory.deploy(
-        pairImpl.address,
-        admin.address,
-        weth.address,
-        UNIV2_FACTORY_ADDR,
-        UniswapV2Router02Abi.address,
-        addresses.unitroller,
-        addresses.reg,
-        addresses.uff,
-        {
-          min: parseEther("0.99"),
-          max: parseEther("1.01"),
-        },
-        feeReceiver.address
-      )
+    beacon = <UBeacon>await UBeaconFactory.deploy(pairImpl.address)
+    console.log("UpgradeableBeacon: ", beacon.address)
+    factory = <DeltaNeutralStableVolatileFactoryUpgradeable>(
+      await DeltaNeutralStableVolatileFactoryUpgradeable.deploy()
+    )
+
+    await factory.initialize(
+      beacon.address,
+      weth.address,
+      UNIV2_FACTORY_ADDR,
+      UniswapV2Router02Abi.address,
+      addresses.unitroller,
+      addresses.reg,
+      addresses.uff,
+      {
+        min: parseEther("0.99"),
+        max: parseEther("1.01"),
+      },
+      feeReceiver.address
     )
 
     const tx = await factory.createPair(dai.address, weth.address)
@@ -1424,6 +1426,31 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       expect(await pair.totalSupply()).to.equal(
         ethers.BigNumber.from(MINIMUM_LIQUIDITY).add(liquidityTotal)
       )
+    })
+  })
+
+  describe("setMmBps()", () => {
+    it("should revert if the caller is not the owner", async () => {
+      await expect(
+        pair.connect(alice).setMmBps({
+          min: BigNumber.from(0),
+          max: TEN_18.div(10),
+        })
+      ).to.be.revertedWith("Ownable: caller is not the owner")
+    })
+
+    it("should work as expected if caller is the owner", async () => {
+      const newMmBps = {
+        min: TEN_18.div(100),
+        max: TEN_18.div(20),
+      }
+
+      await pair.setMmBps(newMmBps)
+
+      const updatedMmBps = await pair.callStatic.mmBps()
+
+      expect(newMmBps.min).to.equal(updatedMmBps.min)
+      expect(newMmBps.max).to.equal(updatedMmBps.max)
     })
   })
 

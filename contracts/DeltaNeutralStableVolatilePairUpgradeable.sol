@@ -12,7 +12,7 @@ import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IComptroller.sol";
 import "../interfaces/ICErc20.sol";
 import "../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
-import "../interfaces/IDeltaNeutralStableVolatileFactory.sol";
+import "../interfaces/IDeltaNeutralStableVolatileFactoryUpgradeable.sol";
 import "../interfaces/IWETH.sol";
 import "../interfaces/autonomy/IRegistry.sol";
 import "./UniswapV2ERC20Upgradeable.sol";
@@ -26,7 +26,7 @@ import "hardhat/console.sol";
 * @notice   TODO
 * @author   Quantaf1re (James Key)
 */
-contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatilePairUpgradeable, Initializable, ReentrancyGuardUpgradeable, UniswapV2ERC20Upgradeable {
+contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatilePairUpgradeable, Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UniswapV2ERC20Upgradeable {
     
     using SafeERC20 for IERC20Metadata;
 
@@ -40,8 +40,9 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         address userFeeVeriForwarder_,
         MmBps memory mmBps_,
         IComptroller _comptroller,
-        IDeltaNeutralStableVolatileFactory dnFactory_
+        IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory_
     ) public override initializer {
+        __Ownable_init_unchained();
         __UniswapV2ERC20Upgradeable__init_unchained(name_, symbol_);
 
         uniV2Router = uniV2Router_;
@@ -94,7 +95,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
 
     MmBps public mmBps;
 
-    IDeltaNeutralStableVolatileFactory dnFactory;
+    IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory;
     // TODO put most of the above vars into a struct so it can be tightly packed to save gas when reading
 
     // TODO add checks on the return values of all Compound fncs for error msgs and revert if not 0, with the code in the revert reason
@@ -496,7 +497,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
     }
 
     // TODO: add owner
-    function setMmBps(MmBps calldata newMmBps) external override {
+    function setMmBps(MmBps calldata newMmBps) external override onlyOwner {
         mmBps = newMmBps;
     }
 
