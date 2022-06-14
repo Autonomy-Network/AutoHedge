@@ -1,5 +1,6 @@
 pragma solidity 0.8.6;
 
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/IDeltaNeutralStableVolatileFactory.sol";
 import "../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
@@ -12,7 +13,7 @@ import "./TProxy.sol";
 import "hardhat/console.sol";
 
 
-contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory {
+contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory, Ownable {
 
 //    address constant _ETH_ADDRESS_ = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE; TODO
 
@@ -28,6 +29,8 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
     address payable public override registry;
     address public override userFeeVeriForwarder;
     IDeltaNeutralStableVolatilePairUpgradeable.MmBps initMmBps;
+    address public override feeReceiver;
+    uint public override depositFee;
 
     constructor(
         address logic_,
@@ -38,7 +41,8 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         IComptroller comptroller_,
         address payable registry_,
         address userFeeVeriForwarder_,
-        IDeltaNeutralStableVolatilePairUpgradeable.MmBps memory initMmBps_
+        IDeltaNeutralStableVolatilePairUpgradeable.MmBps memory initMmBps_,
+        address feeReceiver_
     ) {
         logic = logic_;
         admin = admin_;
@@ -49,6 +53,12 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         registry = registry_;
         userFeeVeriForwarder = userFeeVeriForwarder_;
         initMmBps = initMmBps_;
+        feeReceiver = feeReceiver_;
+        // initial deposit fee is 0.3%
+        depositFee = 3e15;
+
+        emit FeeReceiverSet(feeReceiver);
+        emit DepositFeeSet(depositFee);
     }
 
 
@@ -110,9 +120,9 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
             registry,
             userFeeVeriForwarder,
             initMmBps,
-            comptroller
+            comptroller,
+            address(this)
         );
-        console.log(string(data));
 		pair = address(new TProxy(
             logic,
             admin,
@@ -141,5 +151,17 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         getPair[stable][vol] = pair;
         _allPairs.push(pair);
         emit PairCreated(stable, vol, pair, _allPairs.length);
+    }
+
+    function setFeeReceiver(address newReceiver) external override onlyOwner {
+        require(newReceiver != address(0), "DNFac: zero address");
+        feeReceiver = newReceiver;
+        emit FeeReceiverSet(feeReceiver);
+    }
+
+    function setDepositFee(uint newDepositFee) external override onlyOwner {
+        require(newDepositFee > 0 && newDepositFee < 1 ether, "DNFac: invalid deposit fee");
+        depositFee = newDepositFee;
+        emit DepositFeeSet(depositFee);
     }
 }
