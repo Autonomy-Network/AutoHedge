@@ -16,8 +16,6 @@ import "hardhat/console.sol";
 
 contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVolatileFactoryUpgradeable, Initializable, OwnableUpgradeable {
 
-//    address constant _ETH_ADDRESS_ = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE; TODO
-
     mapping(IERC20Metadata => mapping(IERC20Metadata => address)) public override getPair;
     address[] private _allPairs;
 
@@ -61,23 +59,6 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
         emit DepositFeeSet(depositFee);
     }
 
-
-
-
-
-    // TODO: add setters for the implementation
-    // Add logic and admin vars to the interface
-
-
-
-
-
-
-
-    // function getPair(address tokenA, address tokenB) external override view returns (address) { TODO
-    //     return getPair[tokenA][tokenB];
-    // }
-
     function allPairs(uint index) external override view returns (address) {
         return _allPairs[index];
     }
@@ -94,7 +75,6 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
 
         // Create the pair
         bytes32 salt = keccak256(abi.encodePacked(stable, vol));
-        // TODO: just to get this to compile
         string memory token0Symbol = IERC20Symbol(address(stable)).symbol();
         string memory token1Symbol = IERC20Symbol(address(vol)).symbol();
 
@@ -109,7 +89,6 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
             ICErc20(_comptroller.cTokensByUnderlying(address(uniLp)))
         );
 
-
         bytes memory data = abi.encodeWithSelector(
             IDeltaNeutralStableVolatilePairUpgradeable.initialize.selector,
             uniV2Router,
@@ -123,11 +102,6 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
             comptroller,
             address(this)
         );
-        // pair = address(new TProxy{salt: salt}(
-        //     logic,
-        //     admin,
-        //     data
-        // ));
         pair = address(new BeaconProxy{salt: salt}(beacon, data));
         OwnableUpgradeable(pair).transferOwnership(owner());
         // Housekeeping

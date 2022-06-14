@@ -2378,7 +2378,6 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     console.log("driftFactor = ", driftFactor, driftFactor.mul(100).div(TEN_18))
   })
 
-  // TODO: test rebalance with a fee
   // TODO: test big rebalance value such that it's out of balance after rebalancing
   // TODO: test deposit with large enough deposit for the debt to be out of sync at the end
   // TODO: test withdraw with large enough withdraw for the debt to be out of sync at the end

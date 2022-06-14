@@ -1,7 +1,5 @@
 pragma solidity 0.8.6;
 
-// TODO License
-// SPDX-License-Identifier: UNLICENSED
 
 interface CErc20Storage {
     function underlying() external returns (address);
