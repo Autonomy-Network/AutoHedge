@@ -60,7 +60,7 @@ const defaultWithdrawnEvent = {
   liquidity: BigNumber.from(0),
 }
 
-describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
+describe.skip("DeltaNeutralStableVolatilePairUpgradeable", () => {
   let addresses: UnitrollerSnapshot
   let mockSqrt: MockSqrt
 

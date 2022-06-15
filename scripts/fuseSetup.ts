@@ -15,6 +15,8 @@ import { ArtifactType, getEthPrice, snapshot } from "./utils"
 
 import WETHAbi from "../thirdparty/WETH.json"
 import DAI from "../thirdparty/DAI.json"
+import UNI from "../thirdparty/UNI.json"
+import USDC from "../thirdparty/USDC.json"
 import UniswapV2Router02 from "../thirdparty/UniswapV2Router02.json"
 import InitializableClonesAbi from "../thirdparty/InitializableClones.json"
 import MasterPriceOracleAbi from "../thirdparty/MasterPriceOracle.json"
@@ -25,9 +27,10 @@ import FuseFeeDistributor from "../thirdparty/FuseFeeDistributor.json"
 
 import ICErc20Abi from "../artifacts/interfaces/ICErc20.sol/ICErc20.json"
 
-const { Interface, parseEther } = ethers.utils
+const { Interface, parseEther, parseUnits } = ethers.utils
 
 const UNIV2_DAI_ETH_ADDR = "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"
+const UNIV2_USDC_UNI_ADDR = "0xEBFb684dD2b01E698ca6c14F10e4f289934a54D6"
 
 const FUSE_DEFAULT_ORACLE_ADDR = "0x1887118E49e0F4A78Bd71B792a49dE03504A764D"
 const COMPTROLLER_IMPL_ADDR = "0xe16db319d9da7ce40b666dd2e365a4b8b3c18217"
@@ -44,6 +47,8 @@ let priceCoordinator: SignerWithAddress
 
 let weth: WETH
 let dai: IERC20
+let uni: IERC20
+let usdc: IERC20
 
 let uniRouter
 
@@ -106,6 +111,76 @@ async function deployPool() {
     new ethers.Contract(pools[1][0][2], UnitrollerAbi.abi, owner)
   )
   await unitroller._acceptAdmin()
+}
+
+async function deployUniMarkets() {
+  const reserveFactor = ethers.BigNumber.from("100000000000000000")
+  const collateralFactorMantissa = ethers.BigNumber.from("700000000000000000")
+  const constructorTypes = [
+    "address",
+    "address",
+    "address",
+    "string",
+    "string",
+    "address",
+    "bytes",
+    "uint256",
+    "uint256",
+  ]
+  const fuseOracle = await (
+    await ethers.getContractFactory("FuseOracle")
+  ).deploy() // TODO
+  await masterPriceOracle.add([UNIV2_USDC_UNI_ADDR], [fuseOracle.address])
+  await unitroller._deployMarket(
+    false,
+    ethers.utils.defaultAbiCoder.encode(constructorTypes, [
+      usdc.address,
+      unitroller.address,
+      JUMP_RATE_MODEL_ADDR,
+      "Test0 USDC", // TODO
+      "fUSDC-185", // TODO pool id
+      CERC20_IMPLEMENTATION_ADDR,
+      0x00,
+      reserveFactor,
+      0,
+    ]),
+    collateralFactorMantissa
+  )
+  await unitroller._deployMarket(
+    false,
+    ethers.utils.defaultAbiCoder.encode(constructorTypes, [
+      uni.address,
+      unitroller.address,
+      JUMP_RATE_MODEL_ADDR,
+      "Test0 UNI", // TODO
+      "fUNI-185", // TODO pool id
+      CERC20_IMPLEMENTATION_ADDR,
+      0x00,
+      reserveFactor,
+      0,
+    ]),
+    collateralFactorMantissa
+  )
+  await unitroller._deployMarket(
+    false,
+    ethers.utils.defaultAbiCoder.encode(constructorTypes, [
+      UNIV2_USDC_UNI_ADDR,
+      unitroller.address,
+      JUMP_RATE_MODEL_UNI_ADDR,
+      "UniV2 USDC UNI LP", // TODO
+      "fUNI-USDC-UNI-185", // TODO pool id
+      CERC20_IMPLEMENTATION_ADDR,
+      0x00,
+      reserveFactor,
+      0,
+    ]),
+    collateralFactorMantissa
+  )
+
+  const assets = await fuseLens.getPoolAssetsWithData(unitroller.address)
+  expect(assets[0]["underlyingSymbol"]).to.equal("USDC")
+  expect(assets[1]["underlyingSymbol"]).to.equal("UNI")
+  expect(assets[2]["underlyingSymbol"]).to.equal("UNI-USDC")
 }
 
 async function deployMarkets() {
@@ -197,6 +272,12 @@ async function setupFunds() {
     method: "hardhat_impersonateAccount",
     params: [daiWhaleAddress],
   })
+
+  await owner.sendTransaction({
+    to: daiWhaleAddress,
+    value: parseEther("10"),
+  })
+
   const daiWhale = await ethers.provider.getSigner(daiWhaleAddress)
   await dai.connect(daiWhale).transfer(owner.address, amount)
   await dai.connect(daiWhale).transfer(alice.address, amount)
@@ -207,9 +288,51 @@ async function setupFunds() {
   expect(await dai.balanceOf(bob.address)).to.equal(amount)
   expect(await dai.balanceOf(priceCoordinator.address)).to.equal(amount)
 
+  // get UNI
+  amount = parseEther("1000000")
+  let uniWhaleAddress = "0x1a9C8182C09F50C8318d769245beA52c32BE35BC"
+  await hre.network.provider.request({
+    method: "hardhat_impersonateAccount",
+    params: [uniWhaleAddress],
+  })
+
+  await owner.sendTransaction({
+    to: uniWhaleAddress,
+    value: parseEther("10"),
+  })
+
+  const uniWhale = await ethers.provider.getSigner(uniWhaleAddress)
+  await uni.connect(uniWhale).transfer(owner.address, amount)
+  await uni.connect(uniWhale).transfer(alice.address, amount)
+  await uni.connect(uniWhale).transfer(bob.address, amount)
+  await uni.connect(uniWhale).transfer(priceCoordinator.address, amount)
+  expect(await uni.balanceOf(owner.address)).to.equal(amount)
+  expect(await uni.balanceOf(alice.address)).to.equal(amount)
+  expect(await uni.balanceOf(bob.address)).to.equal(amount)
+  expect(await uni.balanceOf(priceCoordinator.address)).to.equal(amount)
+
+  // get USDC
+  amount = parseUnits("1000000", "mwei")
+  let usdcWhaleAddress = "0x55fe002aeff02f77364de339a1292923a15844b8"
+  await hre.network.provider.request({
+    method: "hardhat_impersonateAccount",
+    params: [usdcWhaleAddress],
+  })
+  console.log(bob.address)
+  const usdcWhale = await ethers.provider.getSigner(usdcWhaleAddress)
+  await usdc.connect(usdcWhale).transfer(owner.address, amount)
+  await usdc.connect(usdcWhale).transfer(alice.address, amount)
+  await usdc.connect(usdcWhale).transfer(bob.address, amount)
+  await usdc.connect(usdcWhale).transfer(priceCoordinator.address, amount)
+  // expect(await usdc.balanceOf(owner.address)).to.equal(amount)
+  // expect(await usdc.balanceOf(alice.address)).to.equal(amount)
+  // expect(await usdc.balanceOf(bob.address)).to.equal(amount)
+  // expect(await usdc.balanceOf(priceCoordinator.address)).to.equal(amount)
+
   // deposit volatile to fuse
   amount = parseEther("1000")
-  await weth.approve(cVol.address, amount)
+  // await weth.approve(cVol.address, amount)
+  await uni.approve(cVol.address, amount)
   await cVol.mint(amount)
   expect(await cVol.callStatic.balanceOfUnderlying(owner.address)).to.equal(
     amount
@@ -285,6 +408,8 @@ async function main() {
 
   weth = <WETH>c(WETHAbi)
   dai = <IERC20>c(DAI)
+  uni = <IERC20>c(UNI)
+  usdc = <IERC20>c(USDC)
 
   uniRouter = c(UniswapV2Router02)
 
@@ -293,18 +418,38 @@ async function main() {
   fuseLens = <FusePoolLens>c(FusePoolLensAbi)
   await deployMasterPriceOracle()
   await deployPool()
-  await deployMarkets()
+  // await deployMarkets()
+  await deployUniMarkets()
 
-  uniLp = new ethers.Contract(UNIV2_DAI_ETH_ADDR, WETHAbi.abi, owner)
+  // uniLp = new ethers.Contract(UNIV2_DAI_ETH_ADDR, WETHAbi.abi, owner)
+  // cVol = <ICErc20>(
+  //   new ethers.Contract(
+  //     await unitroller.cTokensByUnderlying(weth.address),
+  //     ICErc20Abi.abi,
+  //     owner
+  //   )
+  // )
+  // cStable = new ethers.Contract(
+  //   await unitroller.cTokensByUnderlying(dai.address),
+  //   ICErc20Abi.abi,
+  //   owner
+  // )
+  // cUniLp = new ethers.Contract(
+  //   await unitroller.cTokensByUnderlying(uniLp.address),
+  //   ICErc20Abi.abi,
+  //   owner
+  // )
+
+  uniLp = new ethers.Contract(UNIV2_USDC_UNI_ADDR, WETHAbi.abi, owner)
   cVol = <ICErc20>(
     new ethers.Contract(
-      await unitroller.cTokensByUnderlying(weth.address),
+      await unitroller.cTokensByUnderlying(uni.address),
       ICErc20Abi.abi,
       owner
     )
   )
   cStable = new ethers.Contract(
-    await unitroller.cTokensByUnderlying(dai.address),
+    await unitroller.cTokensByUnderlying(usdc.address),
     ICErc20Abi.abi,
     owner
   )
