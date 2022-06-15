@@ -59,7 +59,7 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
         address userFeeVeriForwarder_,
         MmBps memory mmBps_,
         IComptroller _comptroller,
-        IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory_
+        IDeltaNeutralStableVolatileFactoryUpgradeable factory_
     ) external;
     
     /**
@@ -106,7 +106,7 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
      *          10% of the stable lending position, 10% of the DEX LP,
      *          and be responsible for repaying 10% of the vol debt.
      * @param liquidity     The amount of AH LP tokens to burn
-     * @return  The amount of stables that are actually sent to the user
+     * @return amountStableToUser   The amount of stables that are actually sent to the user
      *          after all positions have been withdrawn/repaid
      */
     function withdraw(
@@ -142,6 +142,11 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
      *          by 1e18
      */
     function getDebtBps() external returns (VolPosition memory);
+
+    /**
+     * @notice  Returns the factory that created this pair
+     */
+    function factory() external returns (IDeltaNeutralStableVolatileFactoryUpgradeable);
 
     /**
      * @notice  Set the min and max bps that the pool will use to rebalance,

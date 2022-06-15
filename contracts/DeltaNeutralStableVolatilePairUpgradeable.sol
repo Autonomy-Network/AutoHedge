@@ -47,7 +47,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         address userFeeVeriForwarder_,
         MmBps memory mmBps_,
         IComptroller _comptroller,
-        IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory_
+        IDeltaNeutralStableVolatileFactoryUpgradeable factory_
     ) public override initializer {
         __Ownable_init_unchained();
         __UniswapV2ERC20Upgradeable__init_unchained(name_, symbol_);
@@ -58,7 +58,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         registry = registry_;
         userFeeVeriForwarder = userFeeVeriForwarder_;
         mmBps = mmBps_;
-        dnFactory = dnFactory_;
+        factory = factory_;
 
         tokens_.stable.safeApprove(address(uniV2Router), MAX_UINT);
         tokens_.stable.safeApprove(address(tokens_.cStable), MAX_UINT);
@@ -101,7 +101,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
 
     MmBps public mmBps;
 
-    IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory;
+    IDeltaNeutralStableVolatileFactoryUpgradeable public override factory;
 
 
     function deposit(
@@ -165,7 +165,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         address feeReceiver = referrer;
 
         if (feeReceiver == address(0)) {
-            feeReceiver = dnFactory.feeReceiver();
+            feeReceiver = factory.feeReceiver();
         }
         
         // Mint AutoHedge LP tokens to the user. Need to do this after LPing so we know the exact amount of
@@ -498,7 +498,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         }
         require(liquidity > 0, 'DNPair: invalid liquidity mint');
 
-        liquidityFee = liquidity * dnFactory.depositFee() / BASE_FACTOR;
+        liquidityFee = liquidity * factory.depositFee() / BASE_FACTOR;
         liquidityForUser = liquidity - liquidityFee;
 
         _mint(feeReceiver, liquidityFee);

@@ -10,6 +10,8 @@ import {
   MockSqrt,
   UBeacon,
   Registry,
+  TProxyAdmin,
+  TProxy,
 } from "typechain"
 
 import {
@@ -92,6 +94,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
   let deploySnapshotId: string
   let testSnapshotId: string
 
+  let admin: TProxyAdmin
+  let factoryProxy: TProxy
   let beacon: UBeacon
   let pairImpl: DeltaNeutralStableVolatilePairUpgradeable
 
@@ -180,8 +184,10 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
 
     // It's fucking dumb that BigNumber doesn't support sqrt operations -.- need to mock using the sqrt used in Solidity
     const MockSqrtFactory = await ethers.getContractFactory("MockSqrt")
+    const TProxyAdminFactory = await ethers.getContractFactory("TProxyAdmin")
+    const TProxyFactory = await ethers.getContractFactory("TProxy")
     const UBeaconFactory = await ethers.getContractFactory("UBeacon")
-    const DeltaNeutralStableVolatileFactoryUpgradeable =
+    const DeltaNeutralStableVolatileFactoryUpgradeableFactory =
       await ethers.getContractFactory(
         "DeltaNeutralStableVolatileFactoryUpgradeable"
       )
@@ -192,28 +198,38 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     const RegistryFactory = await ethers.getContractFactory("Registry")
 
     mockSqrt = <MockSqrt>await MockSqrtFactory.deploy()
+    admin = <TProxyAdmin>await TProxyAdminFactory.deploy()
     pairImpl = <DeltaNeutralStableVolatilePairUpgradeable>(
       await DeltaNeutralStableVolatilePairUpgradeableFactory.deploy()
     )
     beacon = <UBeacon>await UBeaconFactory.deploy(pairImpl.address)
     console.log("UpgradeableBeacon: ", beacon.address)
-    factory = <DeltaNeutralStableVolatileFactoryUpgradeable>(
-      await DeltaNeutralStableVolatileFactoryUpgradeable.deploy()
+    const factoryImpl = <DeltaNeutralStableVolatileFactoryUpgradeable>(
+      await DeltaNeutralStableVolatileFactoryUpgradeableFactory.deploy()
     )
-
-    await factory.initialize(
-      beacon.address,
-      weth.address,
-      UNIV2_FACTORY_ADDR,
-      UniswapV2Router02Abi.address,
-      addresses.unitroller,
-      addresses.reg,
-      addresses.uff,
-      {
-        min: parseEther("0.99"),
-        max: parseEther("1.01"),
-      },
-      feeReceiver.address
+    factoryProxy = <TProxy>await TProxyFactory.deploy(
+      factoryImpl.address,
+      admin.address,
+      factoryImpl.interface.encodeFunctionData(
+        "initialize",
+        [
+          beacon.address,
+          weth.address,
+          UNIV2_FACTORY_ADDR,
+          uniV2Router.address,
+          addresses.unitroller,
+          addresses.reg,
+          addresses.uff,
+          {
+            min: parseEther("0.99"),
+            max: parseEther("1.01"),
+          },
+          feeReceiver.address,
+        ],
+      )
+    )
+    factory = <DeltaNeutralStableVolatileFactoryUpgradeable>(
+      await DeltaNeutralStableVolatileFactoryUpgradeableFactory.attach(factoryProxy.address)
     )
 
     const tx = await factory.createPair(dai.address, weth.address)
@@ -221,9 +237,13 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     const lastEvent = receipt.events?.pop()
     const pairAddress = lastEvent ? lastEvent.args?.pair : ""
 
+    expect(await factory.depositFee()).equal(parseEther('0.003'))
+
     pair = <DeltaNeutralStableVolatilePairUpgradeable>(
       await DeltaNeutralStableVolatilePairUpgradeableFactory.attach(pairAddress)
     )
+
+    expect(await pair.factory()).equal(factory.address)
 
     registry = <Registry>await RegistryFactory.attach(addresses.reg)
 
