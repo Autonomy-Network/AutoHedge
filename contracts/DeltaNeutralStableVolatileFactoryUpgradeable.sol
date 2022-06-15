@@ -102,6 +102,7 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
             comptroller,
             address(this)
         );
+        console.logBytes(data); // Need to know the inputs to the constructor to verify the source code
         pair = address(new BeaconProxy{salt: salt}(beacon, data));
         OwnableUpgradeable(pair).transferOwnership(owner());
         // Housekeeping
