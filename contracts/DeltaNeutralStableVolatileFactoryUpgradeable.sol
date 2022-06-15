@@ -1,26 +1,27 @@
 pragma solidity 0.8.6;
 
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 
-import "../interfaces/IDeltaNeutralStableVolatileFactory.sol";
+import "../interfaces/IDeltaNeutralStableVolatileFactoryUpgradeable.sol";
 import "../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
 import "../interfaces/IERC20Symbol.sol";
 import "../interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IComptroller.sol";
-import "./TProxy.sol";
 
 import "hardhat/console.sol";
 
 
-contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory {
+contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVolatileFactoryUpgradeable, Initializable, OwnableUpgradeable {
 
 //    address constant _ETH_ADDRESS_ = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE; TODO
 
     mapping(IERC20Metadata => mapping(IERC20Metadata => address)) public override getPair;
     address[] private _allPairs;
 
-    address public logic;
-    address public admin;
+    address public beacon;
     address public weth;
     IUniswapV2Factory public override uniV2Factory;
     IUniswapV2Router02 public override uniV2Router;
@@ -28,20 +29,23 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
     address payable public override registry;
     address public override userFeeVeriForwarder;
     IDeltaNeutralStableVolatilePairUpgradeable.MmBps initMmBps;
+    address public override feeReceiver;
+    uint public override depositFee;
 
-    constructor(
-        address logic_,
-        address admin_,
+    function initialize(
+        address beacon_,
         address weth_,
         IUniswapV2Factory uniV2Factory_,
         IUniswapV2Router02 uniV2Router_,
         IComptroller comptroller_,
         address payable registry_,
         address userFeeVeriForwarder_,
-        IDeltaNeutralStableVolatilePairUpgradeable.MmBps memory initMmBps_
-    ) {
-        logic = logic_;
-        admin = admin_;
+        IDeltaNeutralStableVolatilePairUpgradeable.MmBps memory initMmBps_,
+        address feeReceiver_
+    ) public override initializer {
+        __Ownable_init_unchained();
+
+        beacon = beacon_;
         weth = weth_;
         uniV2Factory = uniV2Factory_;
         uniV2Router = uniV2Router_;
@@ -49,6 +53,12 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         registry = registry_;
         userFeeVeriForwarder = userFeeVeriForwarder_;
         initMmBps = initMmBps_;
+        feeReceiver = feeReceiver_;
+        // initial deposit fee is 0.3%
+        depositFee = 3e15;
+
+        emit FeeReceiverSet(feeReceiver);
+        emit DepositFeeSet(depositFee);
     }
 
 
@@ -110,27 +120,16 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
             registry,
             userFeeVeriForwarder,
             initMmBps,
-            comptroller
+            comptroller,
+            address(this)
         );
-        console.log(string(data));
-		pair = address(new TProxy(
-            logic,
-            admin,
-            data
-        ));
-        // pair = address(new DeltaNeutralStableVolatilePair{salt: salt}(
-        //     uniV2Factory,
-        //     uniV2Router,
-        //     stable,
-        //     vol,
-        //     string(abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)),
-        //     string(abi.encodePacked("AUTOH-", token0Symbol, "-", token1Symbol)),
-        //     registry,
-        //     userFeeVeriForwarder,
-        //     initMmBps,
-        //     comptroller
+        // pair = address(new TProxy{salt: salt}(
+        //     logic,
+        //     admin,
+        //     data
         // ));
-
+        pair = address(new BeaconProxy{salt: salt}(beacon, data));
+        OwnableUpgradeable(pair).transferOwnership(owner());
         // Housekeeping
         // Don't want to save the reverse ordering because we don't want to sort the
         // tokens. The tokens need to be inputed into `createPair` in the correct
@@ -142,4 +141,23 @@ contract DeltaNeutralStableVolatileFactory is IDeltaNeutralStableVolatileFactory
         _allPairs.push(pair);
         emit PairCreated(stable, vol, pair, _allPairs.length);
     }
+
+    function setFeeReceiver(address newReceiver) external override onlyOwner {
+        require(newReceiver != address(0), "DNFac: zero address");
+        feeReceiver = newReceiver;
+        emit FeeReceiverSet(feeReceiver);
+    }
+
+    function setDepositFee(uint newDepositFee) external override onlyOwner {
+        require(newDepositFee > 0 && newDepositFee < 1 ether, "DNFac: invalid deposit fee");
+        depositFee = newDepositFee;
+        emit DepositFeeSet(depositFee);
+    }
+
+    /**
+     * @dev This empty reserved space is put in place to allow future versions to add new
+     * variables without shifting down storage in the inheritance chain.
+     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+     */
+    uint256[50] private __gap;
 }

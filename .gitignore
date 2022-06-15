@@ -10,5 +10,6 @@ artifacts
 
 #IDE
 .idea
+.vscode/
 
 addresses.json
