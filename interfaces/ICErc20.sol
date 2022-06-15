@@ -28,4 +28,7 @@ interface ICErc20 is CErc20Storage {
     function balanceOf(address account) external view returns (uint);
     function getCash() external view returns (uint);
     function totalSupply() external view returns (uint);
+
+    function borrowRatePerBlock() external view returns (uint);
+    function supplyRatePerBlock() external view returns (uint);
 }
