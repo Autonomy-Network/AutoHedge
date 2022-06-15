@@ -65,8 +65,7 @@ contract UniswapLpTokenPriceOracle is ICompoundPriceOracle {
         uint uniLpPriceInEth = address(uniLp) == weth ? 1e18 : ICompoundBasePriceOracle(msg.sender).price(address(uniLp)).mul(1e18).div(10 ** uint256(uniLp.decimals()));
 
         // convert that to the amounts of stable and volatile the pool owns
-        // uint uniLpValueInEth = cUniLp.balanceOfUnderlying(token) * uniLpPriceInEth; // TODO check if it's this line or the one bellow
-        uint uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) * uniLpPriceInEth; // TODO check if it's this line or the one above
+        uint uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) * uniLpPriceInEth;
 
         // get the amount of volatile owed
         uint stableAmountLentOut = cUniLp.balanceOfUnderlying(token);

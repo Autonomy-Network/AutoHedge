@@ -33,11 +33,9 @@ interface IDeltaNeutralStableVolatileFactoryUpgradeable {
 
     function setFeeReceiver(address newReceiver) external;
     function setDepositFee(uint newDepositFee) external;
-    // function setFeeToSetter(address) external; TODO
 
     function uniV2Factory() external view returns (IUniswapV2Factory);
     function uniV2Router() external view returns (IUniswapV2Router02);
-//    function fuse() external view returns (address); TODO
     function registry() external view returns (address payable);
     function userFeeVeriForwarder() external view returns (address);
     function feeReceiver() external view returns (address);

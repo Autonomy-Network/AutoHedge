@@ -6,6 +6,7 @@
     "fork": "hardhat node --fork",
     "fuse": "hardhat run scripts/fuseSetup.ts --network local",
     "test": "hardhat test --network local",
+    "deploy": "hardhat run scripts/deploy.ts",
     "postinstall": "npm run build"
   },
   "devDependencies": {
