@@ -22,8 +22,15 @@ import "hardhat/console.sol";
 
 
 /**
-* @title    DeltaNeutralPair
-* @notice   TODO
+* @title    AutoHedgeStableVolatilePair
+* @notice   AutoHedge allows users to LP on DEXes while remaining
+*           delta-neutral, i.e. if they deposit $100 onto an AH
+*           pair that has an underlying DEX pair of DAI-ETH, then
+*           even when the price of ETH doubles or halves, the position
+*           value is still worth exactly $100, and accumulates LP
+*           trading fees ontop. This is the 1st iteration of AH and
+*           only works with a DEX pair where 1 of the assets is a
+*           stablecoin.
 * @author   Quantaf1re (James Key)
 */
 contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatilePairUpgradeable, Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UniswapV2ERC20Upgradeable {
@@ -40,7 +47,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         address userFeeVeriForwarder_,
         MmBps memory mmBps_,
         IComptroller _comptroller,
-        IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory_
+        IDeltaNeutralStableVolatileFactoryUpgradeable factory_
     ) public override initializer {
         __Ownable_init_unchained();
         __UniswapV2ERC20Upgradeable__init_unchained(name_, symbol_);
@@ -51,7 +58,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         registry = registry_;
         userFeeVeriForwarder = userFeeVeriForwarder_;
         mmBps = mmBps_;
-        dnFactory = dnFactory_;
+        factory = factory_;
 
         tokens_.stable.safeApprove(address(uniV2Router), MAX_UINT);
         tokens_.stable.safeApprove(address(tokens_.cStable), MAX_UINT);
@@ -92,13 +99,9 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
     Tokens public tokens;
     IERC20Metadata public weth;
 
-
     MmBps public mmBps;
 
-    IDeltaNeutralStableVolatileFactoryUpgradeable dnFactory;
-    // TODO put most of the above vars into a struct so it can be tightly packed to save gas when reading
-
-    // TODO add checks on the return values of all Compound fncs for error msgs and revert if not 0, with the code in the revert reason
+    IDeltaNeutralStableVolatileFactoryUpgradeable public override factory;
 
 
     function deposit(
@@ -162,7 +165,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         address feeReceiver = referrer;
 
         if (feeReceiver == address(0)) {
-            feeReceiver = dnFactory.feeReceiver();
+            feeReceiver = factory.feeReceiver();
         }
         
         // Mint AutoHedge LP tokens to the user. Need to do this after LPing so we know the exact amount of
@@ -172,7 +175,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         
         // Use LP token as collateral
         uint code = _tokens.cUniLp.mint(amountUniLp);
-        require(code == 0, string(abi.encodePacked("DNPair: fuse LP mint ", Strings.toString(code)))); // TODO
+        require(code == 0, string(abi.encodePacked("DNPair: fuse LP mint ", Strings.toString(code))));
 
         // Borrow the volatile token
         code = _tokens.cVol.borrow(amountVol);
@@ -203,9 +206,6 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         }
         require(code == 0, string(abi.encodePacked("DNPair: fuse stable mint ", Strings.toString(code))));
 
-        // TODO check if things need rebalancing already, because by trading the volatile token for the stable token, we moved the market
-        // rebalance(5 * 10**9);
-
         emit Deposited(msg.sender, amountStable, amountVol, amountUniLp, amountsVolToStable[amountsVolToStable.length-1], liquidityForUser);
     }
 
@@ -214,7 +214,6 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
     // would require they have enough funds in their wallet, but they'd end up paying less gas, the contract
     // would be simpler, and they'd end up with the same $ value at the end anyway (tho maybe not if the trade
     // size is large enough because more funds would be swapped and therefore pay 0.3% fee on)
-    // TODO: add min amount out for 'zap' swap
     function withdraw(
         uint liquidity,
         UniArgs calldata uniArgs
@@ -255,20 +254,6 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
 
         require(code == 0, string(abi.encodePacked("DNPair: fuse vol repay ", Strings.toString(code))));
         uint amountUniLp = _tokens.cUniLp.balanceOfUnderlying(address(this)) * liquidity / _totalSupply;
-
-
-
-
-
-
-
-        // Not being able to withdraw everything is because of A) MINIMUM_LIQUIDITY being locked, and B)
-        // also because there may be a tiny amount owing if the debt is higher than the lending 
-
-
-
-
-
 
         // To avoid stack too deep
         UniArgs memory uniArgs = uniArgs;
@@ -342,8 +327,6 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             block.timestamp
         );
 
-        // TODO: take into account that this contract has MINIMUM_LIQUIDITY tokens which would
-        // be taken by these lines if a pair was made for its own AH liquidity token
         amountStableToUser = _tokens.stable.balanceOf(address(this));
         _tokens.stable.safeTransfer(msg.sender, amountStableToUser);
 
@@ -351,9 +334,6 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
 
         emit Withdrawn(msg.sender, amountStableFromLending, amountVolToRepay, liquidity);
     }
-
-    // TODO return token addresses
-
 
     /**
      * @notice  Checks how much of the non-stablecoin asset we have being LP'd with on IDEX (amount X) and
@@ -374,9 +354,6 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         _rebalance(0, passIfInBounds);
     }
 
-    // TODO: need to account for when there isn't enough stablecoins being lent out to repay
-    // TODO: use a constant for the timestamp to reduce gas
-    // TODO: add flash-loan protection
     function _rebalance(uint feeAmount, bool passIfInBounds) private {
         Tokens memory _tokens = tokens; // Gas savings
         VolPosition memory volPos = _getDebtBps(_tokens);
@@ -417,7 +394,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
 
                 // Repay the debt
                 code = _tokens.cVol.repayBorrow(amountVolToRepay);
-                require(code == 0, string(abi.encodePacked("DNPair: fuse vol repay ", Strings.toString(code))));
+                require(code == 0, string(abi.encodePacked("DNPair: fuse repay borrow WETH ", Strings.toString(code))));
 
                 // Pay `feeAmount`
                 if (feeAmount > 0 && !payFeeFromBal) {
@@ -438,7 +415,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
 
                 uniV2Router.swapTokensForExactTokens(amountVolToRepay, amountStableForDebt, pathStableToVol, address(this), block.timestamp);
                 code = _tokens.cVol.repayBorrow(amountVolToRepay);
-                require(code == 0, string(abi.encodePacked("DNPair: fuse vol repay ", Strings.toString(code))));
+                require(code == 0, string(abi.encodePacked("DNPair: fuse repay borrow non-WETH ", Strings.toString(code))));
 
                 if (feeAmount > 0 && !payFeeFromBal) {
                     uniV2Router.swapTokensForExactETH(feeAmount, amountStableToRedeem-amountStableForDebt, pathFee, payable(address(this)), block.timestamp);
@@ -449,7 +426,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             // Borrow more
             uint amountVolBorrowed = volPos.owned - volPos.debt;
             code = _tokens.cVol.borrow(amountVolBorrowed);
-            require(code == 0, string(abi.encodePacked("DNPair: fuse vol borrow ", Strings.toString(code))));
+            require(code == 0, string(abi.encodePacked("DNPair: fuse borrow more ", Strings.toString(code))));
+
             // First swap everything to the stablecoin and then swap the `feeAmount` to ETH,
             // rather than swapping to ETH first, because if the volatile is WETH/ETH, then swapping
             // WETH/ETH to ETH would error in Uniswap
@@ -475,7 +453,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             }
             
             code = _tokens.cStable.mint(amountStableToLend);
-            require(code == 0, string(abi.encodePacked("DNPair: fuse stable mint ", Strings.toString(code))));
+            require(code == 0, string(abi.encodePacked("DNPair: fuse more stable mint ", Strings.toString(code))));
         } else {
             require(passIfInBounds, "DNPair: debt within range");
         }
@@ -488,19 +466,16 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         require(volPos.bps >= mb.min && volPos.bps <= mb.max, "DNPair: debt not within range");
     }
 
-    // TODO: mark as view, issue with balanceOfUnderlying not being view
     function getDebtBps() public override returns (VolPosition memory) {
         return _getDebtBps(tokens);
     }
 
-    // TODO: mark as view, issue with balanceOfUnderlying not being view
     function _getDebtBps(Tokens memory _tokens) private returns (VolPosition memory volPos) {
         volPos.owned = _tokens.vol.balanceOf(address(_tokens.uniLp)) * _tokens.cUniLp.balanceOfUnderlying(address(this)) / _tokens.uniLp.totalSupply();
         volPos.debt = _tokens.cVol.borrowBalanceCurrent(address(this));
         volPos.bps = volPos.debt * BASE_FACTOR / volPos.owned;
     }
 
-    // TODO: add owner
     function setMmBps(MmBps calldata newMmBps) external override onlyOwner {
         mmBps = newMmBps;
     }
@@ -516,14 +491,14 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         uint _totalSupply = totalSupply;
         uint liquidity;
         if (_totalSupply == 0) {
-            liquidity = Maths.sqrt(amountStable * amountVol) - MINIMUM_LIQUIDITY; // TODO ?
+            liquidity = Maths.sqrt(amountStable * amountVol) - MINIMUM_LIQUIDITY;
            _mint(address(this), MINIMUM_LIQUIDITY); // permanently lock the first MINIMUM_LIQUIDITY tokens
         } else {
             liquidity = _totalSupply * increaseFactor / BASE_FACTOR;
         }
         require(liquidity > 0, 'DNPair: invalid liquidity mint');
 
-        liquidityFee = liquidity * dnFactory.depositFee() / BASE_FACTOR;
+        liquidityFee = liquidity * factory.depositFee() / BASE_FACTOR;
         liquidityForUser = liquidity - liquidityFee;
 
         _mint(feeReceiver, liquidityFee);
