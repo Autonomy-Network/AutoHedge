@@ -255,7 +255,7 @@ async function deployAutonomy() {
 }
 
 async function main() {
-  ;[owner, bob, alice, priceCoordinator] = await ethers.getSigners()
+  [owner, bob, alice, priceCoordinator] = await ethers.getSigners()
 
   let fuseAdminAddr = "0x5eA4A9a7592683bF0Bc187d6Da706c6c4770976F"
   await owner.sendTransaction({
