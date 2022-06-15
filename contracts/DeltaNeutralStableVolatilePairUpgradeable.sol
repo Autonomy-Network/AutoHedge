@@ -448,7 +448,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         } else if (volPos.bps <= mb.min) {
             // Borrow more
             uint amountVolBorrowed = volPos.owned - volPos.debt;
-            _tokens.cVol.borrow(amountVolBorrowed);
+            code = _tokens.cVol.borrow(amountVolBorrowed);
+            require(code == 0, string(abi.encodePacked("DNPair: fuse vol borrow ", Strings.toString(code))));
             // First swap everything to the stablecoin and then swap the `feeAmount` to ETH,
             // rather than swapping to ETH first, because if the volatile is WETH/ETH, then swapping
             // WETH/ETH to ETH would error in Uniswap
