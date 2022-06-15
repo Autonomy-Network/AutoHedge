@@ -1,7 +1,5 @@
 pragma solidity 0.8.6;
 
-// TODO
-// SPDX-License-Identifier: UNLICENSED
 
 interface IUniswapV2Router01 {
     function factory() external pure returns (address);

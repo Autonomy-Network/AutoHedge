@@ -124,7 +124,7 @@ async function deployMarkets() {
   ]
   const fuseOracle = await (
     await ethers.getContractFactory("FuseOracle")
-  ).deploy() // TODO
+  ).deploy()
   await masterPriceOracle.add([UNIV2_DAI_ETH_ADDR], [fuseOracle.address])
   await unitroller._deployMarket(
     false,
@@ -132,8 +132,8 @@ async function deployMarkets() {
       UNIV2_DAI_ETH_ADDR,
       unitroller.address,
       JUMP_RATE_MODEL_UNI_ADDR,
-      "UniV2 DAI ETH LP", // TODO
-      "fUNI-DAI-ETH-185", // TODO pool id
+      "UniV2 DAI ETH LP",
+      "fUNI-DAI-ETH-185",
       CERC20_IMPLEMENTATION_ADDR,
       0x00,
       reserveFactor,
@@ -147,8 +147,8 @@ async function deployMarkets() {
       dai.address,
       unitroller.address,
       JUMP_RATE_MODEL_ADDR,
-      "Test0 DAI", // TODO
-      "fDAI-185", // TODO pool id
+      "Test0 DAI",
+      "fDAI-185",
       CERC20_IMPLEMENTATION_ADDR,
       0x00,
       reserveFactor,
@@ -162,8 +162,8 @@ async function deployMarkets() {
       weth.address,
       unitroller.address,
       JUMP_RATE_MODEL_ADDR,
-      "Test0 Ethereum", // TODO
-      "fETH-185", // TODO pool id
+      "Test0 WETH",
+      "fETH-185",
       CERC20_IMPLEMENTATION_ADDR,
       0x00,
       reserveFactor,
