@@ -318,7 +318,6 @@ async function setupFunds() {
     method: "hardhat_impersonateAccount",
     params: [usdcWhaleAddress],
   })
-  console.log(bob.address)
   const usdcWhale = await ethers.provider.getSigner(usdcWhaleAddress)
   await usdc.connect(usdcWhale).transfer(owner.address, amount)
   await usdc.connect(usdcWhale).transfer(alice.address, amount)
@@ -330,7 +329,7 @@ async function setupFunds() {
   // expect(await usdc.balanceOf(priceCoordinator.address)).to.equal(amount)
 
   // deposit volatile to fuse
-  amount = parseEther("1000")
+  amount = parseEther("10000")
   // await weth.approve(cVol.address, amount)
   await uni.approve(cVol.address, amount)
   await cVol.mint(amount)

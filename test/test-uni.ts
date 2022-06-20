@@ -133,12 +133,12 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       1,
       [usdc.address, uni.address],
       owner.address,
-      TEN_18
+      constants.MaxUint256
     )
     const amountStableEstimated = amountVolEstimated
       .mul(await usdc.balanceOf(UNIV2_USDC_UNI_ADDR))
       .div(await uni.balanceOf(UNIV2_USDC_UNI_ADDR))
-    await uniV2Router.addLiquidity(
+    const { liquidity } = await uniV2Router.callStatic.addLiquidity(
       usdc.address,
       uni.address,
       amountStableEstimated,
@@ -146,8 +146,9 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       1,
       1,
       owner.address,
-      TEN_18
+      constants.MaxUint256
     )
+    console.log(liquidity)
     const amountStableSwappedIntoEstimated = (
       await uniV2Router.getAmountsOut(amountVolEstimated, [
         uni.address,
