@@ -1579,7 +1579,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const testSnapshotId3 = await snapshot()
 
       // check rebalance(false)
-      await pair.connect(alice).rebalance(false)
+      await pair.rebalance(false)
 
       // factory, pair, cTokens, owner
       // Stable
@@ -1624,7 +1624,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       await revertSnapshot(testSnapshotId3)
 
       // check rebalance(true)
-      await pair.connect(alice).rebalance(true)
+      await pair.rebalance(true)
 
       // factory, pair, cTokens, owner
       // Stable
@@ -1803,7 +1803,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const testSnapshotId3 = await snapshot()
     
       // check rebalance(false)
-      await pair.connect(alice).rebalance(false)
+      await pair.rebalance(false)
     
       // factory, pair, cTokens, owner
       // Stable
@@ -1848,7 +1848,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       await revertSnapshot(testSnapshotId3)
     
       // check rebalance(true)
-      await pair.connect(alice).rebalance(true)
+      await pair.rebalance(true)
     
       // factory, pair, cTokens, owner
       // Stable
@@ -1899,12 +1899,6 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     
       const wethBalanceBefore = await weth.balanceOf(owner.address)
       const daiBalanceBefore = await dai.balanceOf(owner.address)
-    
-      // // Swap ETH for DAI in advance, DAI will be swapped for ETH later to decrease the amount of ETH held in the DEX
-      // // so that we can test repay case on rebalance() function
-      // const amountWethSell = parseEther('1')
-      // await weth.connect(bob).approve(uniV2Router.address, amountWethSell)
-      // await uniV2Router.connect(bob).swapExactTokensForTokens(amountWethSell, 1, [weth.address, dai.address], bob.address, TEN_18)
     
       const {
         amountsStableToVol,
@@ -1983,7 +1977,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       )
       
       // check rebalance(true)
-      await pair.connect(alice).rebalance(true);
+      await pair.rebalance(true);
     
       // factory, pair, cTokens, owner
       // Stable
