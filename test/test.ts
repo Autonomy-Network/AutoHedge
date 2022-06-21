@@ -169,7 +169,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
   }
 
   before(async () => {
-    ;[owner, bob, alice, priceCoordinator, feeReceiver, referrer] =
+    [owner, bob, alice, priceCoordinator, feeReceiver, referrer] =
       await ethers.getSigners()
 
     addresses = getAddresses()
@@ -1447,6 +1447,136 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         ethers.BigNumber.from(MINIMUM_LIQUIDITY).add(liquidityTotal)
       )
     })
+
+    it("Should not affect AutoHedge LP token value after adding liquidity", async () => {
+      const amountStableInit = parseEther(String(1.1 * ethPrice * 2)) // fuse min borrow amount is 1 ETH, and half is kept as DAI
+      const amountVolZapMin = parseEther("1")
+      const amountStableMin = 0
+      const amountVolMin = 0
+      const swapAmountOutMin = 0
+
+      const wethBalanceBefore = await weth.balanceOf(owner.address)
+      const daiBalanceBefore = await dai.balanceOf(owner.address)
+
+      const {
+        amountsStableToVol,
+        amountVolEstimated,
+        amountStableEstimated,
+        amountStableSwappedIntoEstimated,
+      } = await estimateDeposit(amountStableInit)
+
+      const tx = await pair.deposit(
+        amountStableInit,
+        amountVolZapMin,
+        {
+          amountStableMin,
+          amountVolMin,
+          deadline: noDeadline,
+          pathStableToVol: [dai.address, weth.address],
+          pathVolToStable: [weth.address, dai.address],
+          swapAmountOutMin,
+        },
+        owner.address,
+        constants.AddressZero
+      )
+      const receipt = await tx.wait()
+
+      const { amountStable, amountUniLp, amountVol } = getDepositEvent(receipt)
+
+      // factory, pair, cTokens, owner
+      expect(amountVol).to.equal(amountVolEstimated)
+      expect(amountStable).to.equal(amountStableEstimated)
+      expect(wethBalanceBefore).to.equal(await weth.balanceOf(owner.address))
+      expect(amountStable.add(amountStableInit.div(2))).to.equal(
+        daiBalanceBefore.sub(await dai.balanceOf(owner.address))
+      )
+      // Stable
+      expect(await dai.balanceOf(factory.address)).to.equal(0)
+      expect(await dai.balanceOf(pair.address)).to.equal(0)
+      expect(await dai.balanceOf(owner.address)).to.equal(
+        daiBalanceBefore.sub(amountStable).sub(amountsStableToVol[0])
+      )
+      // It's off by 1 wei, not sure why, very likely a rounding error somewhere in hardhat/js
+      equalTol(
+        await cStable.callStatic.balanceOfUnderlying(pair.address),
+        amountStableSwappedIntoEstimated
+      )
+      // Volatile
+      expect(await weth.balanceOf(factory.address)).to.equal(0)
+      expect(await weth.balanceOf(pair.address)).to.equal(0)
+      expect(await weth.balanceOf(owner.address)).to.equal(wethBalanceBefore)
+      expect(await cVol.callStatic.borrowBalanceCurrent(pair.address)).to.equal(
+        amountVol
+      )
+      // Uniswap LP token
+      expect(await uniLp.balanceOf(factory.address)).to.equal(0)
+      expect(await uniLp.balanceOf(pair.address)).to.equal(0)
+      expect(await uniLp.balanceOf(owner.address)).to.equal(0)
+      expect(
+        await cUniLp.callStatic.balanceOfUnderlying(pair.address)
+      ).to.equal(amountUniLp)
+      // AutoHedge LP token
+      expect(await pair.balanceOf(factory.address)).to.equal(0)
+      expect(await pair.balanceOf(pair.address)).to.equal(MINIMUM_LIQUIDITY)
+      const liquidityTotal = (
+        await mockSqrt.sqrt(amountVol.mul(amountStable))
+      ).sub(MINIMUM_LIQUIDITY)
+      const liqudityFee = liquidityTotal
+        .mul(await factory.depositFee())
+        .div(TEN_18)
+      const ownerLiquidityBalance = liquidityTotal.sub(liqudityFee)
+      expect(await pair.balanceOf(owner.address)).to.equal(
+        ownerLiquidityBalance
+      )
+
+      // Should revert when trying to rebalance when it's not needed
+      await expect(pair.rebalance(false)).to.be.revertedWith(
+        REV_MSG_WITHIN_RANGE
+      )
+
+      const withdrawAmountBefore = await pair.callStatic.withdraw(ownerLiquidityBalance, {
+        amountStableMin,
+        amountVolMin,
+        deadline: noDeadline,
+        pathStableToVol: [dai.address, weth.address],
+        pathVolToStable: [weth.address, dai.address],
+        swapAmountOutMin,
+      })
+
+      // Add more liquidity, increase the liquidity 2 times
+      await dai.connect(alice).approve(uniV2Router.address, amountStableInit)
+      await weth.connect(alice).approve(uniV2Router.address, amountStableInit)
+      await uniV2Router.connect(alice).addLiquidity(
+        dai.address,
+        weth.address,
+        amountStableEstimated,
+        amountVolEstimated,
+        1,
+        1,
+        owner.address,
+        TEN_18
+      )
+
+      // Should revert when trying to rebalance when it's not needed
+      await expect(pair.rebalance(false)).to.be.revertedWith(
+        REV_MSG_WITHIN_RANGE
+      )
+
+      await pair.rebalance(true);
+
+      const withdrawAmountAfter = await pair.callStatic.withdraw(ownerLiquidityBalance, {
+        amountStableMin,
+        amountVolMin,
+        deadline: noDeadline,
+        pathStableToVol: [dai.address, weth.address],
+        pathVolToStable: [weth.address, dai.address],
+        swapAmountOutMin,
+      })
+
+      // AutoHedge LP token value change, it's a bit changed due to cToken value change
+      // It shouldn't be changed if we ignore cToken value change
+      equalTol(withdrawAmountBefore, withdrawAmountAfter)
+    })
   })
 
   describe("setMmBps()", () => {
@@ -2401,6 +2531,6 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
   // TODO: test big rebalance value such that it's out of balance after rebalancing
   // TODO: test deposit with large enough deposit for the debt to be out of sync at the end
   // TODO: test withdraw with large enough withdraw for the debt to be out of sync at the end
-  // TODO: test that the rebalance condition isn't triggered by people adding liquidity
+  // TODO: test the rebalance condition with non-ETH asset that isn't triggered by people adding liquidity
   // TODO: test rebalance with non-ETH asset
 })
