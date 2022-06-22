@@ -19,6 +19,8 @@ import "hardhat/console.sol";
 contract AutoHedgeLeveragedPosition is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     function initialize(IFlashloanWrapper flw_) external initializer {
         flw = flw_;
+        // TODO: add call to depositLev so they can create the contract
+        // and open a position in 1 tx
     }
 
     using SafeERC20 for IERC20Metadata;
@@ -40,18 +42,37 @@ contract AutoHedgeLeveragedPosition is Initializable, OwnableUpgradeable, Reentr
     }
 
     /**
-     * @param amountStableBorrow The amount of stables to borrow from a flashloan and
-     *      be repaid by the FuseMidas debt. This needs to account for the flashloan
-     *      fee in order to not increase the overall leverage ratio by reducing the
-     *      amount
-
-     *      repay the Fuse/Midas debt. This needs to account for the flashloan fee in
-     *      order to not change the overall leverage level of the position. For example
-     *      if leverage is 10x and withdrawing $10 of stables to the user, means
-     *      withdrawing $100 of AHLP tokens, which means needing to flashloan borrow
-     *      $90 of stables - which has a fee of $0.27 if the fee is 0.3%. Therefore
-     *      `amountStableRepay` needs to be $90 / 0.997 = 90.2708... to account for
-     *      paying the $0.27 and then the extra $0.0008... for the fee on the $0.27
+     * @param amountStableDeposit   The amount of stables taken from the user
+     * @param amountStableFlashloan The amount of stables to borrow from a flashloan which
+     *      is used to deposit (along with `amountStableDeposit`) to AH. Since there
+     *      is a fee for taking out a flashloan and depositing to AH, that's paid by
+     *      borrowing more stables, which therefore increases the leverage ratio. In
+     *      order to compensate for this, we need to have a reduced flashloan which
+     *      therefore lowers the total position size. Given `amountStableDeposit` and
+     *      the desired leverage ratio, we can calculate `amountStableFlashloan`
+     *      with these linear equations:
+     *          The flashloan fee is a % of the loan
+     *          (a) amountFlashloanFee = amountStableFlashloan*flashloanFeeRate
+     *
+     *          The value of the AH LP tokens after depositing is the total amount deposited,
+     *          which is the initial collateral and the amount from the flashloan, multiplied by
+     *          the amount that is kept after fees/costs
+     *          (b) amountStableAhlp = (amountStableDeposit + amountStableFlashloan)*ahConvRate
+     *
+     *          The amount being borrowed from Fuse needs to be enough to pay back the flashloan
+     *          and its fee
+     *          (c) amountStableBorrowed = amountStableFlashloan + amountFlashloanFee
+     *
+     *          The leverage ratio is the position size div by the 'collateral', i.e. how
+     *          much the user would be left with after withdrawing everything.
+     *          TODO: 'collatera' currently doesn't account for the flashloan fee when withdrawing
+     *          (d) leverage = amountStableAhlp / (amountStableAhlp - amountStableBorrowed)
+     *
+     *      Rearranging, the general formula for `amountStableFlashloan` is:
+     *          (h) amountStableFlashloan = ((amountStableDeposit + amountStableFlashloan)*ahConvRate*(1-(1/leverage))) / (1+flashloanFeeRate)
+     * @param leverageRatio The leverage ratio scaled to 1e18. Used to check that the leverage
+     *      is what is intended at the end of the fcn. E.g. if wanting 5x leverage, this should
+     *      be 5e18.
      */
     function depositLev(
         IComptroller comptroller,
@@ -60,53 +81,51 @@ contract AutoHedgeLeveragedPosition is Initializable, OwnableUpgradeable, Reentr
         IDeltaNeutralStableVolatilePairUpgradeable.UniArgs calldata uniArgs,
         address referrer,
         uint amountStableDeposit,
-        uint amountStableBorrow
+        uint amountStableFlashloan,
+        uint leverageRatio
     ) external onlyOwner nonReentrant {
-        require(amountStableBorrow > 0, "AHLevPos: total less than init");
+        require(amountStableFlashloan > 0, "AHLevPos: total less than init");
 
         // Enter the relevant markets on Fuse/Midas
-        address[] memory cTokens = new address[](4);
+        address[] memory cTokens = new address[](2);
         cTokens[0] = address(tokens.cStable);
-        cTokens[1] = address(tokens.cVol);
-        cTokens[2] = address(tokens.cUniLp);
-        cTokens[3] = address(tokens.cAhlp);
+        cTokens[1] = address(tokens.cAhlp);
         uint[] memory results = comptroller.enterMarkets(cTokens);
-        require(results[0] == 0 && results[1] == 0 && results[2] == 0 && results[3] == 0, "AHLevPos: cant enter markets");
+        require(results[0] == 0 && results[1] == 0, "AHLevPos: cant enter markets");
 
         transferApproveUnapproved(address(tokens.pair), tokens.stable, amountStableDeposit);
 
         // Take out a flashloan for the amount that needs to be borrowed
         uint stableBalBefore = tokens.stable.balanceOf(address(this));
-        uint feeAmount = flw.takeOutFlashLoan(address(tokens.stable), amountStableBorrow);
-        require(tokens.stable.balanceOf(address(this)) == stableBalBefore + amountStableBorrow);
+        uint feeAmount = flw.takeOutFlashLoan(address(tokens.stable), amountStableFlashloan);
+        require(tokens.stable.balanceOf(address(this)) == stableBalBefore + amountStableFlashloan);
 
         // Deposit all stables (except for the flashloan fee) from the user and flashloan to AH
         tokens.pair.deposit(
-            amountStableDeposit + amountStableBorrow - feeAmount,
+            amountStableDeposit + amountStableFlashloan,
             amountVolZapMin,
             uniArgs,
             address(this),
             referrer
         );
 
-
-
-        // TODO: Need to account for the fee of AH
-
-
-
-
         // Put all AHLP tokens as collateral
-        uint code = tokens.cAhlp.mint(IERC20Metadata(address(tokens.pair)).balanceOf(address(this)));
+        // TODO: call approve on cAhlp
+        uint ahlpBal = IERC20Metadata(address(tokens.pair)).balanceOf(address(this));
+        approveUnapproved(address(tokens.cAhlp), IERC20Metadata(address(tokens.pair)), ahlpBal);
+        uint code = tokens.cAhlp.mint(ahlpBal);
         require(code == 0, string(abi.encodePacked("AHLevPos: fuse mint ", Strings.toString(code))));
 
         // Borrow the same amount of stables from Fuse/Midas as was borrowed in the flashloan
-        code = tokens.cStable.borrow(amountStableBorrow);
+        // TODO: call approve on cStable
+        uint amountStableFlashloanRepay = amountStableFlashloan + feeAmount;
+        approveUnapproved(address(tokens.cStable), tokens.stable, amountStableFlashloanRepay);
+        code = tokens.cStable.borrow(amountStableFlashloanRepay);
         require(code == 0, string(abi.encodePacked("AHLevPos: fuse borrow ", Strings.toString(code))));
 
         // Repay the flashloan
-        approveUnapproved(address(flw), tokens.stable, amountStableBorrow + feeAmount);
-        flw.repayFlashLoan(address(tokens.stable), amountStableBorrow + feeAmount);
+        approveUnapproved(address(flw), tokens.stable, amountStableFlashloanRepay);
+        flw.repayFlashLoan(address(tokens.stable), amountStableFlashloanRepay);
 
         // TODO: Some checks requiring that the positions are what they should be everywhere
         // TODO: Check that the collat ratio is above some value
@@ -175,14 +194,6 @@ contract AutoHedgeLeveragedPosition is Initializable, OwnableUpgradeable, Reentr
         // Send the user their #madgainz
         tokens.stable.safeTransfer(msg.sender, amountStableWithdraw);
     }
-
-    // Withdrawing 5k, 50k leveraged amount, 0.3% fee from flashloan = $135
-    // Take flashloan of $45k stables
-    // Repay $45,135 stables debt
-    // Take $50k AHLP tokens from collat
-    // Convert to $50k stables
-    // Repay $45,135 stables
-    // Withdraw $5k back to the user
 
     // fcns to withdraw tokens incase of liquidation
 
