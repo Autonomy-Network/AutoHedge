@@ -38,8 +38,8 @@ const RES_TOL_UPPER = 1000010
 const RES_TOL_TOTAL = 1000000
 
 export function equalTol(a: BigNumber, b: BigNumber) {
-  expect(a).gt(b.mul(RES_TOL_LOWER).div(RES_TOL_TOTAL))
-  expect(a).lt(b.mul(RES_TOL_UPPER).div(RES_TOL_TOTAL))
+  expect(a).gte(b.mul(RES_TOL_LOWER).div(RES_TOL_TOTAL))
+  expect(a).lte(b.mul(RES_TOL_UPPER).div(RES_TOL_TOTAL))
 }
 
 export async function snapshot(): Promise<string> {
