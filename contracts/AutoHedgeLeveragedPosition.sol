@@ -65,11 +65,29 @@ contract AutoHedgeLeveragedPosition is Initializable, OwnableUpgradeable, Reentr
      *
      *          The leverage ratio is the position size div by the 'collateral', i.e. how
      *          much the user would be left with after withdrawing everything.
-     *          TODO: 'collatera' currently doesn't account for the flashloan fee when withdrawing
+     *          TODO: 'collateral' currently doesn't account for the flashloan fee when withdrawing
      *          (d) leverage = amountStableAhlp / (amountStableAhlp - amountStableBorrowed)
      *
+     *      Subbing (a) into (c):
+     *          (e) amountStableBorrowed = amountStableFlashloan + amountStableFlashloan*flashloanFeeRate
+     *          (f) amountStableBorrowed = amountStableFlashloan*(1 + flashloanFeeRate)
+     *          (g) amountStableFlashloan = amountStableBorrowed/(1 + flashloanFeeRate)
+     *
+     *      Rearranging (d):
+     *          (h) amountStableAhlp - amountStableBorrowed = amountStableAhlp/leverage
+     *          (i) amountStableBorrowed = amountStableAhlp*(1 - (1/leverage))
+     *
+     *      Subbing (i) into (g):
+     *          (j) amountStableFlashloan = (amountStableAhlp * (1 - (1/leverage))) / (1 + flashloanFeeRate)
+     *
+     *      Subbing (b) into (j):
+     *          (k) amountStableFlashloan = (((amountStableDeposit + amountStableFlashloan)*ahConvRate) * (1 - (1/leverage))) / (1 + flashloanFeeRate)
      *      Rearranging, the general formula for `amountStableFlashloan` is:
-     *          (h) amountStableFlashloan = ((amountStableDeposit + amountStableFlashloan)*ahConvRate*(1-(1/leverage))) / (1+flashloanFeeRate)
+     *          (l) amountStableFlashloan = -(amountStableDeposit * ahConvRate * (leverage - 1)) / (ahConvRate * (leverage - 1) - leverage * (flashloanFeeRate + 1))
+     *
+     *      E.g. if amountStableDeposit = 10, ahConvRate = 0.991, leverage = 5, flashloanFeeRate = 0.0005
+     *          amountStableFlashloan = -(10 * 0.991 * (5 - 1)) / (0.991 * (5 - 1) - 5 * (0.0005 + 1))
+     *          amountStableFlashloan = 37.71646...
      * @param leverageRatio The leverage ratio scaled to 1e18. Used to check that the leverage
      *      is what is intended at the end of the fcn. E.g. if wanting 5x leverage, this should
      *      be 5e18.
