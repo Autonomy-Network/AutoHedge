@@ -23,6 +23,7 @@ import {
   UnitrollerSnapshot,
   snapshot,
   revertSnapshot,
+  defaultDepositEvent,
 } from "../scripts/utils"
 
 import ICErc20Abi from "../artifacts/interfaces/ICErc20.sol/ICErc20.json"
@@ -49,12 +50,6 @@ const AUTO_ID = 0
 const MIN_GAS = 21000
 
 const REV_MSG_WITHIN_RANGE = "DNPair: debt within range"
-
-const defaultDepositEvent = {
-  amountStable: BigNumber.from(0),
-  amountUniLp: BigNumber.from(0),
-  amountVol: BigNumber.from(0),
-}
 
 const defaultWithdrawnEvent = {
   amountStableFromLending: BigNumber.from(0),
@@ -203,33 +198,31 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       await DeltaNeutralStableVolatilePairUpgradeableFactory.deploy()
     )
     beacon = <UBeacon>await UBeaconFactory.deploy(pairImpl.address)
-    console.log("UpgradeableBeacon: ", beacon.address)
     const factoryImpl = <DeltaNeutralStableVolatileFactoryUpgradeable>(
       await DeltaNeutralStableVolatileFactoryUpgradeableFactory.deploy()
     )
     factoryProxy = <TProxy>await TProxyFactory.deploy(
       factoryImpl.address,
       admin.address,
-      factoryImpl.interface.encodeFunctionData(
-        "initialize",
-        [
-          beacon.address,
-          weth.address,
-          UNIV2_FACTORY_ADDR,
-          uniV2Router.address,
-          addresses.unitroller,
-          addresses.reg,
-          addresses.uff,
-          {
-            min: parseEther("0.99"),
-            max: parseEther("1.01"),
-          },
-          feeReceiver.address,
-        ],
-      )
+      factoryImpl.interface.encodeFunctionData("initialize", [
+        beacon.address,
+        weth.address,
+        UNIV2_FACTORY_ADDR,
+        uniV2Router.address,
+        addresses.unitroller,
+        addresses.reg,
+        addresses.uff,
+        {
+          min: parseEther("0.99"),
+          max: parseEther("1.01"),
+        },
+        feeReceiver.address,
+      ])
     )
     factory = <DeltaNeutralStableVolatileFactoryUpgradeable>(
-      await DeltaNeutralStableVolatileFactoryUpgradeableFactory.attach(factoryProxy.address)
+      await DeltaNeutralStableVolatileFactoryUpgradeableFactory.attach(
+        factoryProxy.address
+      )
     )
 
     const tx = await factory.createPair(dai.address, weth.address)
@@ -237,7 +230,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     const lastEvent = receipt.events?.pop()
     const pairAddress = lastEvent ? lastEvent.args?.pair : ""
 
-    expect(await factory.depositFee()).equal(parseEther('0.003'))
+    expect(await factory.depositFee()).equal(parseEther("0.003"))
 
     pair = <DeltaNeutralStableVolatilePairUpgradeable>(
       await DeltaNeutralStableVolatilePairUpgradeableFactory.attach(pairAddress)

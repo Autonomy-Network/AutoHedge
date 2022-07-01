@@ -13,14 +13,12 @@ import "./ICompoundBasePriceOracle.sol";
 import "../../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
 import "../../contracts/DeltaNeutralStableVolatilePairUpgradeable.sol";
 
-
 /**
- * @title UniswapLpTokenPriceOracle
- * @author David Lucid <david@rari.capital> (https://github.com/davidlucid)
- * @notice UniswapLpTokenPriceOracle is a price oracle for Uniswap (and SushiSwap) LP tokens.
+ * @title AutoHedgeOracle
+ * @notice AutoHedgeOracle is a price oracle for Uniswap (and SushiSwap) LP tokens.
  * @dev Implements the `ICompoundPriceOracle` interface used by Fuse pools (and Compound v2).
  */
-contract UniswapLpTokenPriceOracle is ICompoundPriceOracle {
+contract AutoHedgeOracle is ICompoundPriceOracle {
     using SafeMathUpgradeable for uint256;
 
     address public immutable weth;
@@ -34,7 +32,7 @@ contract UniswapLpTokenPriceOracle is ICompoundPriceOracle {
      * @param underlying The underlying token address for which to get the price (set to zero address for ETH)
      * @return Price denominated in ETH (scaled by 1e18)
      */
-    function price(address underlying) external returns (uint) {
+    function price(address underlying) external returns (uint256) {
         return _price(underlying);
     }
 
@@ -43,41 +41,77 @@ contract UniswapLpTokenPriceOracle is ICompoundPriceOracle {
      * @dev Implements the `ICompoundPriceOracle` interface for Fuse pools (and Compound v2).
      * @return Price in ETH of the token underlying `cToken`, scaled by `10 ** (36 - underlyingDecimals)`.
      */
-    function getUnderlyingPrice(CToken cToken) external override returns (uint) {
+    function getUnderlyingPrice(CToken cToken)
+        external
+        override
+        returns (uint256)
+    {
         address underlying = CErc20(address(cToken)).underlying();
         // Comptroller needs prices to be scaled by 1e(36 - decimals)
         // Since `_price` returns prices scaled by 18 decimals, we must scale them by 1e(36 - 18 - decimals)
-        return _price(underlying).mul(1e18).div(10 ** uint256(ERC20Upgradeable(underlying).decimals()));
+        return
+            _price(underlying).mul(1e18).div(
+                10**uint256(ERC20Upgradeable(underlying).decimals())
+            );
     }
 
     /**
      * @dev Fetches the fair LP token/ETH price from Uniswap, with 18 decimals of precision.
      */
-    function _price(address token) internal virtual returns (uint) {
-        IDeltaNeutralStableVolatilePairUpgradeable pair = IDeltaNeutralStableVolatilePairUpgradeable(token);
+    function _price(address token) internal virtual returns (uint256) {
+        IDeltaNeutralStableVolatilePairUpgradeable pair = IDeltaNeutralStableVolatilePairUpgradeable(
+                token
+            );
 
-        (IERC20Metadata stable,,IERC20Metadata volatile, ICErc20 cVol,IERC20Metadata uniLp, ICErc20 cUniLp) = pair.getTokens();
+        (
+            IERC20Metadata stable,
+            ,
+            IERC20Metadata volatile,
+            ICErc20 cVol,
+            IERC20Metadata uniLp,
+            ICErc20 cUniLp
+        ) = pair.getTokens();
 
         // get the prices of the volatile and the stable
-        uint stablePriceInEth = address(stable) == weth ? 1e18 : ICompoundBasePriceOracle(msg.sender).price(address(stable)).mul(1e18).div(10 ** uint256(stable.decimals()));
-        uint volatilePriceInEth = address(volatile) == weth ? 1e18 : ICompoundBasePriceOracle(msg.sender).price(address(volatile)).mul(1e18).div(10 ** uint256(volatile.decimals()));
-    
-        uint uniLpPriceInEth = address(uniLp) == weth ? 1e18 : ICompoundBasePriceOracle(msg.sender).price(address(uniLp)).mul(1e18).div(10 ** uint256(uniLp.decimals()));
+        uint256 stablePriceInEth = address(stable) == weth
+            ? 1e18
+            : ICompoundBasePriceOracle(msg.sender)
+                .price(address(stable))
+                .mul(1e18)
+                .div(10**uint256(stable.decimals()));
+        uint256 volatilePriceInEth = address(volatile) == weth
+            ? 1e18
+            : ICompoundBasePriceOracle(msg.sender)
+                .price(address(volatile))
+                .mul(1e18)
+                .div(10**uint256(volatile.decimals()));
+
+        uint256 uniLpPriceInEth = address(uniLp) == weth
+            ? 1e18
+            : ICompoundBasePriceOracle(msg.sender)
+                .price(address(uniLp))
+                .mul(1e18)
+                .div(10**uint256(uniLp.decimals()));
 
         // convert that to the amounts of stable and volatile the pool owns
-        uint uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) * uniLpPriceInEth;
+        uint256 uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) *
+            uniLpPriceInEth;
 
         // get the amount of volatile owed
-        uint stableAmountLentOut = cUniLp.balanceOfUnderlying(token);
+        uint256 stableAmountLentOut = cUniLp.balanceOfUnderlying(token);
 
-        uint stableLentOutValueInEth = stableAmountLentOut * stablePriceInEth;
+        uint256 stableLentOutValueInEth = stableAmountLentOut *
+            stablePriceInEth;
 
         // get the amount of stables lent out
-        uint volatileAmountOwed = cVol.borrowBalanceCurrent(address(this));
+        uint256 volatileAmountOwed = cVol.borrowBalanceCurrent(address(this));
 
-        uint volatileOwedValueInEth = volatileAmountOwed * volatilePriceInEth;
+        uint256 volatileOwedValueInEth = volatileAmountOwed *
+            volatilePriceInEth;
 
-        uint totalValue = uniLpValueInEth + stableLentOutValueInEth - volatileOwedValueInEth;
+        uint256 totalValue = uniLpValueInEth +
+            stableLentOutValueInEth -
+            volatileOwedValueInEth;
 
         return totalValue;
     }
@@ -87,10 +121,10 @@ contract UniswapLpTokenPriceOracle is ICompoundPriceOracle {
      * Implementation from: https://github.com/Uniswap/uniswap-lib/commit/99f3f28770640ba1bb1ff460ac7c5292fb8291a0
      * Original implementation: https://github.com/abdk-consulting/abdk-libraries-solidity/blob/master/ABDKMath64x64.sol#L687
      */
-    function sqrt(uint x) internal pure returns (uint) {
+    function sqrt(uint256 x) internal pure returns (uint256) {
         if (x == 0) return 0;
-        uint xx = x;
-        uint r = 1;
+        uint256 xx = x;
+        uint256 r = 1;
 
         if (xx >= 0x100000000000000000000000000000000) {
             xx >>= 128;
@@ -127,7 +161,7 @@ contract UniswapLpTokenPriceOracle is ICompoundPriceOracle {
         r = (r + x / r) >> 1;
         r = (r + x / r) >> 1;
         r = (r + x / r) >> 1; // Seven iterations should be enough
-        uint r1 = x / r;
+        uint256 r1 = x / r;
         return (r < r1 ? r : r1);
     }
 }

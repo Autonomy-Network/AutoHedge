@@ -16,7 +16,20 @@ export type UnitrollerSnapshot = {
   unitroller: string
   reg: string
   uff: string
+  oracle: string
 }
+
+export const defaultDepositEvent = {
+  amountStable: BigNumber.from(0),
+  amountUniLp: BigNumber.from(0),
+  amountVol: BigNumber.from(0),
+}
+
+export const JUMP_RATE_MODEL_ADDR = "0xbAB47e4B692195BF064923178A90Ef999A15f819"
+export const JUMP_RATE_MODEL_UNI_ADDR =
+  "0xc35DB333EF7ce4F246DE9DE11Cc1929d6AA11672" // noinspection SpellCheckingInspection
+export const CERC20_IMPLEMENTATION_ADDR =
+  "0x67Db14E73C2Dce786B5bbBfa4D010dEab4BBFCF9"
 
 export function getAddresses(): UnitrollerSnapshot {
   // noinspection JSCheckFunctionSignatures
