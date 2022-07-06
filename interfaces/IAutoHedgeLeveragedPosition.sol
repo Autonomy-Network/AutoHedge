@@ -4,6 +4,8 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import "../interfaces/ICErc20.sol";
 import "../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
+import "../interfaces/IFlashloanWrapper.sol";
+import "../interfaces/IAutoHedgeLeveragedPositionFactory.sol";
 
 interface IAutoHedgeLeveragedPosition {
     struct TokensLev {
@@ -16,6 +18,16 @@ interface IAutoHedgeLeveragedPosition {
         IDeltaNeutralStableVolatilePairUpgradeable pair;
         ICErc20 cAhlp;
     }
+
+    event DepositLev(
+        address indexed comptroller,
+        address indexed pair,
+        uint256 amountStableDeposit,
+        uint256 amountStableFlashloan,
+        uint256 leverageRatio
+    );
+
+    function initialize(IAutoHedgeLeveragedPositionFactory factory_) external;
 
     function initiateDeposit(
         uint256 amount,

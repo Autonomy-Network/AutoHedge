@@ -1,10 +1,9 @@
 import { ethers } from "hardhat"
 import { expect } from "chai"
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
-import { BigNumber, constants, ContractReceipt, utils } from "ethers"
+import { BigNumber, constants, ContractReceipt, Event, utils } from "ethers"
 
 import {
-  FusePoolLens,
   MasterPriceOracle,
   UniswapV2Router02,
   Unitroller,
@@ -20,9 +19,11 @@ import {
   TProxyAdmin,
   TProxy,
   FlashloanWrapper,
-  FlashloanWrapperProxy,
+  UUPSProxy,
   AutoHedgeLeveragedPosition,
   BeaconProxy,
+  AutoHedgeLeveragedPositionFactory,
+  MockSqrt,
 } from "typechain"
 
 import {
@@ -35,6 +36,9 @@ import {
   defaultDepositEvent,
   JUMP_RATE_MODEL_UNI_ADDR,
   CERC20_IMPLEMENTATION_ADDR,
+  defaultFlashLoanEvent,
+  defaultFlashLoanRepaidEvent,
+  MINIMUM_LIQUIDITY,
 } from "../scripts/utils"
 
 import FusePoolLensAbi from "../thirdparty/FusePoolLens.json"
@@ -59,6 +63,7 @@ describe.only("AutoHedgeLeveragedPosition", () => {
   let addresses: UnitrollerSnapshot
 
   let owner: SignerWithAddress
+  let alice: SignerWithAddress
   let feeReceiver: SignerWithAddress
 
   let weth: WETH
@@ -75,10 +80,11 @@ describe.only("AutoHedgeLeveragedPosition", () => {
   let masterPriceOracle: MasterPriceOracle
   let flw: FlashloanWrapper
   let ahlp: AutoHedgeLeveragedPosition
+  let ahlpFactory: AutoHedgeLeveragedPositionFactory
+  let mockSqrt: MockSqrt
 
   let admin: TProxyAdmin
   let factoryProxy: TProxy
-  let beacon: UBeacon
   let pairImpl: DeltaNeutralStableVolatilePairUpgradeable
   let comptroller: string
   let levTokens
@@ -86,6 +92,7 @@ describe.only("AutoHedgeLeveragedPosition", () => {
   let registry: Registry
 
   let testSnapshotId: string
+  let allTimeTestSnapshotId: string
 
   const c = (artifact: ArtifactType) =>
     new ethers.Contract(artifact.address, artifact.abi, owner)
@@ -113,11 +120,12 @@ describe.only("AutoHedgeLeveragedPosition", () => {
       )
     const RegistryFactory = await ethers.getContractFactory("Registry")
 
+    mockSqrt = <MockSqrt>await MockSqrtFactory.deploy()
     admin = <TProxyAdmin>await TProxyAdminFactory.deploy()
     pairImpl = <DeltaNeutralStableVolatilePairUpgradeable>(
       await DeltaNeutralStableVolatilePairUpgradeableFactory.deploy()
     )
-    beacon = <UBeacon>await UBeaconFactory.deploy(pairImpl.address)
+    const beacon = <UBeacon>await UBeaconFactory.deploy(pairImpl.address)
     const factoryImpl = <DeltaNeutralStableVolatileFactoryUpgradeable>(
       await DeltaNeutralStableVolatileFactoryUpgradeableFactory.deploy()
     )
@@ -169,29 +177,22 @@ describe.only("AutoHedgeLeveragedPosition", () => {
       new ethers.Contract(tokens.cStable, ICErc20Abi.abi, owner)
     )
     cUniLp = <ICErc20>new ethers.Contract(tokens.cUniLp, ICErc20Abi.abi, owner)
+
     const unitroller = <Unitroller>(
       new ethers.Contract(comptroller, UnitrollerAbi.abi, owner)
     )
-    cAhlp = <ICErc20>(
-      new ethers.Contract(
-        await unitroller.cTokensByUnderlying(pair.address),
-        ICErc20Abi.abi,
-        owner
-      )
-    )
-    levTokens = {
-      ...tokens,
-      pair: pair.address,
-      cAhlp: cAhlp.address,
-    }
 
     masterPriceOracle = <MasterPriceOracle>(
       new ethers.Contract(addresses.oracle, MasterPriceOracleAbi.abi, owner)
     )
     // TODO make a separate Price Oracle for AHLP
     const ahOracle = await (
-      await ethers.getContractFactory("AutoHedgeOracle")
+      await ethers.getContractFactory("AutoHedgeDummyOracle")
     ).deploy(weth.address)
+    await owner.sendTransaction({
+      value: parseEther("10"),
+      to: ahOracle.address,
+    })
     await masterPriceOracle.add([pair.address], [ahOracle.address])
 
     const reserveFactor = ethers.BigNumber.from("100000000000000000")
@@ -208,40 +209,34 @@ describe.only("AutoHedgeLeveragedPosition", () => {
       "uint256",
     ]
 
-    try {
-      await unitroller._deployMarket(
-        false,
-        ethers.utils.defaultAbiCoder.encode(constructorTypes, [
-          pair.address,
-          unitroller.address,
-          JUMP_RATE_MODEL_UNI_ADDR,
-          "DAI ETH AHLP",
-          "fAH-DAI-ETH-185",
-          CERC20_IMPLEMENTATION_ADDR,
-          0x00,
-          reserveFactor,
-          0,
-        ]),
-        collateralFactorMantissa
+    await unitroller._deployMarket(
+      false,
+      ethers.utils.defaultAbiCoder.encode(constructorTypes, [
+        pair.address,
+        unitroller.address,
+        "0xc35DB333EF7ce4F246DE9DE11Cc1929d6AA11672",
+        "DAI ETH AHLP",
+        "fAH-DAI-ETH-185",
+        CERC20_IMPLEMENTATION_ADDR,
+        0x00,
+        reserveFactor,
+        0,
+      ]),
+      collateralFactorMantissa
+    )
+
+    cAhlp = <ICErc20>(
+      new ethers.Contract(
+        await unitroller.cTokensByUnderlying(pair.address),
+        ICErc20Abi.abi,
+        owner
       )
-    } catch (err) {
-      console.log(err)
+    )
+    levTokens = {
+      ...tokens,
+      pair: pair.address,
+      cAhlp: cAhlp.address,
     }
-
-    const fuseLens = <FusePoolLens>c(FusePoolLensAbi)
-    // console.log(await unitroller.getAllMarkets())
-    try {
-      // const assets = await fuseLens.callStatic.getPoolAssetsWithData(
-      //   unitroller.address
-      // )
-      // console.log(assets)
-      console.log(await fuseLens.callStatic.getPoolSummary(unitroller.address))
-    } catch (err) {
-      console.log(err)
-    }
-
-    await weth.approve(pair.address, constants.MaxUint256)
-    await dai.approve(pair.address, constants.MaxUint256)
   }
 
   async function deployFlashLoanWrapper() {
@@ -249,11 +244,9 @@ describe.only("AutoHedgeLeveragedPosition", () => {
       "FlashloanWrapper"
     )
     const flwImpl = <FlashloanWrapper>await FlashloanWrapperFactory.deploy()
-    const FlashloanWrapperProxyFactory = await ethers.getContractFactory(
-      "FlashloanWrapperProxy"
-    )
-    const flwProxy = <FlashloanWrapperProxy>(
-      await FlashloanWrapperProxyFactory.deploy(
+    const UUPSProxyFactory = await ethers.getContractFactory("UUPSProxy")
+    const flwProxy = <UUPSProxy>(
+      await UUPSProxyFactory.deploy(
         flwImpl.address,
         flwImpl.interface.encodeFunctionData("initialize", [
           SUSHI_BENTOBOX_ADDR,
@@ -268,26 +261,47 @@ describe.only("AutoHedgeLeveragedPosition", () => {
   }
 
   async function deployAutoHedgeLeveragedPosition() {
-    const AutoHedgeLeveragedPositionFactory = await ethers.getContractFactory(
+    const AHLPFactory = await ethers.getContractFactory(
       "AutoHedgeLeveragedPosition"
     )
-    const ahlpImpl = <AutoHedgeLeveragedPosition>(
-      await AutoHedgeLeveragedPositionFactory.deploy()
-    )
+    const ahlpImpl = <AutoHedgeLeveragedPosition>await AHLPFactory.deploy()
     const UBeaconFactory = await ethers.getContractFactory("UBeacon")
     const beacon = <UBeacon>await UBeaconFactory.deploy(ahlpImpl.address)
-    const BeaconProxyFactory = await ethers.getContractFactory("BeaconProxy")
-    const ahlpProxy = <BeaconProxy>(
-      await BeaconProxyFactory.deploy(
-        beacon.address,
-        ahlpImpl.interface.encodeFunctionData("initialize", [flw.address])
-      )
-    )
-    ahlp = <AutoHedgeLeveragedPosition>(
-      await AutoHedgeLeveragedPositionFactory.attach(ahlpProxy.address)
+
+    const AutoHedgeLeveragedPositionFactoryFactory =
+      await ethers.getContractFactory("AutoHedgeLeveragedPositionFactory")
+    const ahlpFactoryImpl = <AutoHedgeLeveragedPositionFactory>(
+      await AutoHedgeLeveragedPositionFactoryFactory.deploy()
     )
 
-    expect(await ahlp.flw()).to.equal(flw.address)
+    const UUPSProxyFactory = await ethers.getContractFactory("UUPSProxy")
+    const ahlpFactoryProxy = <UUPSProxy>(
+      await UUPSProxyFactory.deploy(
+        ahlpFactoryImpl.address,
+        ahlpFactoryImpl.interface.encodeFunctionData("initialize", [
+          beacon.address,
+          flw.address,
+        ])
+      )
+    )
+
+    ahlpFactory = <AutoHedgeLeveragedPositionFactory>(
+      AutoHedgeLeveragedPositionFactoryFactory.attach(ahlpFactoryProxy.address)
+    )
+
+    const tx = await ahlpFactory.createLeveragedPosition()
+
+    const receipt = await tx.wait()
+    const lastEvent = receipt.events?.pop()
+    const lvgPos = lastEvent ? lastEvent.args?.lvgPos : ""
+
+    ahlp = <AutoHedgeLeveragedPosition>AHLPFactory.attach(lvgPos)
+
+    expect(await ahlpFactory.flw()).to.equal(flw.address)
+    expect(await ahlp.factory()).to.equal(ahlpFactory.address)
+
+    await weth.approve(ahlp.address, constants.MaxUint256)
+    await dai.approve(ahlp.address, constants.MaxUint256)
   }
 
   async function getWETHPrice() {
@@ -349,10 +363,105 @@ describe.only("AutoHedgeLeveragedPosition", () => {
   }
 
   function getDepositEvent(receipt: ContractReceipt) {
-    const depositedEvent = receipt.events?.find(
+    const depositedEventByName = receipt.events?.find(
       ({ event }) => event === "Deposited"
     )
-    return depositedEvent?.args ?? defaultDepositEvent
+    if (depositedEventByName?.args) {
+      return depositedEventByName.args
+    }
+
+    const depositedEventTopic = utils.id(
+      "Deposited(address,uint256,uint256,uint256,uint256,uint256)"
+    )
+    const depositedEventsByTopic: Event[] | undefined = receipt.events?.filter(
+      ({ topics }) => topics.includes(depositedEventTopic)
+    )
+    if (!depositedEventsByTopic || depositedEventsByTopic.length === 0) {
+      return defaultDepositEvent
+    }
+    const depositedEvent = depositedEventsByTopic[0]
+
+    const abi = [
+      "event Deposited(address indexed user, uint amountStable, uint amountVol, uint amountUniLp, uint amountStableSwap, uint amountMinted)",
+    ]
+    const iface = new utils.Interface(abi)
+    const {
+      args: { amountStable, amountVol, amountUniLp },
+    } = iface.parseLog(depositedEvent)
+    return {
+      amountStable,
+      amountUniLp,
+      amountVol,
+    }
+  }
+
+  function getFlashLoanEvent(receipt: ContractReceipt) {
+    const flashloanEventByName = receipt.events?.find(
+      ({ event }) => event === "FlashLoan"
+    )
+    if (flashloanEventByName?.args) {
+      return flashloanEventByName.args
+    }
+
+    const flashLoanEventTopic = utils.id(
+      "FlashLoan(address,address,uint256,uint256,uint256)"
+    )
+    const flashLoanEventsByTopic: Event[] | undefined = receipt.events?.filter(
+      ({ topics }) => topics.includes(flashLoanEventTopic)
+    )
+    if (!flashLoanEventsByTopic || flashLoanEventsByTopic.length === 0) {
+      return defaultFlashLoanEvent
+    }
+    const flashLoanEvent = flashLoanEventsByTopic[0]
+
+    const abi = [
+      "event FlashLoan(address indexed receiver,address token,uint256 amount,uint256 fee,uint256 loanType)",
+    ]
+    const iface = new utils.Interface(abi)
+    const {
+      args: { receiver, token, amount, fee, loanType },
+    } = iface.parseLog(flashLoanEvent)
+    return {
+      receiver,
+      token,
+      amount,
+      fee,
+      loanType,
+    }
+  }
+
+  function getFlashLoanRepaidEvent(receipt: ContractReceipt) {
+    const flashloanRepaidEventByName = receipt.events?.find(
+      ({ event }) => event === "FlashLoanRepaid"
+    )
+    if (flashloanRepaidEventByName?.args) {
+      return flashloanRepaidEventByName.args
+    }
+
+    const flashLoanRepaidEventTopic = utils.id(
+      "FlashLoanRepaid(address,uint256)"
+    )
+    const flashLoanRepaidEventsByTopic: Event[] | undefined =
+      receipt.events?.filter(({ topics }) =>
+        topics.includes(flashLoanRepaidEventTopic)
+      )
+    if (
+      !flashLoanRepaidEventsByTopic ||
+      flashLoanRepaidEventsByTopic.length === 0
+    ) {
+      return defaultFlashLoanRepaidEvent
+    }
+    const flashLoanRepaidEvent = flashLoanRepaidEventsByTopic[0]
+
+    const abi = ["event FlashLoanRepaid(address indexed to,uint256 amount)"]
+    const iface = new utils.Interface(abi)
+    const {
+      args: { to, amount },
+    } = iface.parseLog(flashLoanRepaidEvent)
+    return {
+      to,
+      amount,
+    }
   }
 
   beforeEach(async () => {
@@ -364,18 +473,24 @@ describe.only("AutoHedgeLeveragedPosition", () => {
   })
 
   before(async () => {
-    ;[owner, feeReceiver] = await ethers.getSigners()
+    ;[owner, alice, feeReceiver] = await ethers.getSigners()
+
+    allTimeTestSnapshotId = await snapshot()
 
     await deployAutoHedge()
     await deployFlashLoanWrapper()
     await deployAutoHedgeLeveragedPosition()
   })
 
+  after(async () => {
+    await revertSnapshot(allTimeTestSnapshotId)
+  })
+
   describe("depositLev", () => {
     it("should work as expected", async () => {
       const wethPrice = await getWETHPrice()
       const amountStableDeposit = parseEther(String(1.1 * wethPrice * 2))
-      const amountVolZapMin = parseEther("1")
+      const amountVolZapMin = 0
       // 5x leverage
       const leverageRatio = parseEther("5")
 
@@ -387,12 +502,8 @@ describe.only("AutoHedgeLeveragedPosition", () => {
       )
       const amountStableFlashloan = amountStableDeposit.mul(b).div(c.sub(b))
       const amountToDepositToAH = amountStableDeposit.add(amountStableFlashloan)
-      const {
-        amountsStableToVol,
-        amountVolEstimated,
-        amountStableEstimated,
-        amountStableSwappedIntoEstimated,
-      } = await estimateDeposit(amountToDepositToAH)
+      const { amountVolEstimated, amountStableEstimated } =
+        await estimateDeposit(amountToDepositToAH)
 
       const tokens = await pair.tokens()
 
@@ -419,9 +530,30 @@ describe.only("AutoHedgeLeveragedPosition", () => {
       )
       const receipt = await tx.wait()
 
-      const { amountStable, amountUniLp, amountVol } = getDepositEvent(receipt)
+      const { amount: flashLoanAmount, fee: flashLoanFee } =
+        getFlashLoanEvent(receipt)
+      const { amount: flashLoanRepaidAmount } = getFlashLoanRepaidEvent(receipt)
 
-      console.log(parseEther(amountStable), parseEther(amountVol))
+      const totalLoan = flashLoanAmount.add(flashLoanFee)
+
+      expect(flashLoanAmount).to.equal(amountStableFlashloan)
+      expect(flashLoanRepaidAmount).to.equal(totalLoan)
+
+      const { amountStable, amountVol } = getDepositEvent(receipt)
+
+      expect(amountVol).to.equal(amountVolEstimated)
+      expect(amountStable).to.equal(amountStableEstimated)
+
+      const liquidity = (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
+        MINIMUM_LIQUIDITY
+      )
+      const liquidityFee = liquidity.mul(await factory.depositFee()).div(TEN_18)
+      // Check if cAhlp token balance is correct
+      expect(await cAhlp.callStatic.balanceOfUnderlying(ahlp.address)).to.equal(
+        liquidity.sub(liquidityFee)
+      )
+      // TODO do we need to make referrer fee as cToken?
+      expect(await pair.balanceOf(feeReceiver.address)).to.equal(liquidityFee)
     })
   })
 })

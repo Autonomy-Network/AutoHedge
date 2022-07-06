@@ -8,6 +8,8 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "../interfaces/IFlashloanWrapper.sol";
 import "../interfaces/IAutoHedgeLeveragedPosition.sol";
 
+import "hardhat/console.sol";
+
 contract FlashloanWrapper is
     Initializable,
     UUPSUpgradeable,
@@ -66,23 +68,26 @@ contract FlashloanWrapper is
         );
         require(ahLpContract != address(0), "FLW: invalid call data");
 
+        emit FlashLoan(ahLpContract, token, amount, fee, uint256(loanType));
+
         if (loanType == FlashLoanTypes.Deposit) {
             IAutoHedgeLeveragedPosition(ahLpContract).initiateDeposit(
                 amount,
                 fee,
-                data[64:]
+                data
             );
         } else {
             IAutoHedgeLeveragedPosition(ahLpContract).initiateWithdraw(
                 amount,
                 fee,
-                data[64:]
+                data
             );
         }
     }
 
     function repayFlashLoan(IERC20 token, uint256 amount) external override {
         token.safeTransferFrom(msg.sender, address(sushiBentoBox), amount);
+        emit FlashLoanRepaid(address(sushiBentoBox), amount);
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {}

@@ -31,6 +31,7 @@ import UnitrollerAbi from "../thirdparty/Unitroller.json"
 import FuseFeeDistributor from "../thirdparty/FuseFeeDistributor.json"
 
 import ICErc20Abi from "../artifacts/interfaces/ICErc20.sol/ICErc20.json"
+import { formatEther } from "ethers/lib/utils"
 
 const { Interface, parseEther } = ethers.utils
 
@@ -207,6 +208,10 @@ async function setupFunds() {
     params: [daiWhaleAddress],
   })
   const daiWhale = await ethers.provider.getSigner(daiWhaleAddress)
+  await dai.transfer(
+    ethers.constants.AddressZero,
+    await dai.balanceOf(owner.address)
+  )
   await dai.connect(daiWhale).transfer(owner.address, amount)
   await dai.connect(daiWhale).transfer(alice.address, amount)
   await dai.connect(daiWhale).transfer(bob.address, amount)
@@ -326,6 +331,11 @@ async function main() {
   await unitroller.enterMarkets([cStable.address, cVol.address, cUniLp.address])
 
   await setupFunds()
+
+  let daiWhaleAddress = "0xe78388b4ce79068e89bf8aa7f218ef6b9ab0e9d0"
+  const daiWhale = await ethers.provider.getSigner(daiWhaleAddress)
+  await dai.connect(daiWhale).transfer(cStable.address, parseEther("1000000"))
+  console.log(formatEther(await dai.balanceOf(cStable.address)))
 
   const [reg, uff] = await deployAutonomy()
 

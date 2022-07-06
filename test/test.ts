@@ -24,6 +24,7 @@ import {
   snapshot,
   revertSnapshot,
   defaultDepositEvent,
+  MINIMUM_LIQUIDITY,
 } from "../scripts/utils"
 
 import ICErc20Abi from "../artifacts/interfaces/ICErc20.sol/ICErc20.json"
@@ -39,8 +40,6 @@ const abi = new ethers.utils.AbiCoder()
 const { parseEther, formatEther } = ethers.utils
 
 const UNIV2_FACTORY_ADDR = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
-
-const MINIMUM_LIQUIDITY = 1000
 
 const RES_TOL_LOWER = 999990
 const RES_TOL_UPPER = 1000010

@@ -6,7 +6,6 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
-import "../interfaces/IFlashloanWrapper.sol";
 import "../interfaces/IComptroller.sol";
 import "../interfaces/IAutoHedgeLeveragedPosition.sol";
 
@@ -18,9 +17,13 @@ contract AutoHedgeLeveragedPosition is
     ReentrancyGuardUpgradeable,
     IAutoHedgeLeveragedPosition
 {
-    function initialize(IFlashloanWrapper flw_) external initializer {
+    function initialize(IAutoHedgeLeveragedPositionFactory factory_)
+        external
+        override
+        initializer
+    {
         __Ownable_init_unchained();
-        flw = flw_;
+        factory = factory_;
         // TODO: add call to depositLev so they can create the contract
         // and open a position in 1 tx
     }
@@ -30,7 +33,7 @@ contract AutoHedgeLeveragedPosition is
     uint256 private constant BASE_FACTOR = 1e18;
     uint256 private constant MAX_UINT = type(uint256).max;
 
-    IFlashloanWrapper public flw;
+    IAutoHedgeLeveragedPositionFactory public factory;
 
     /**
      * @param amountStableDeposit   The amount of stables taken from the user
@@ -128,11 +131,19 @@ contract AutoHedgeLeveragedPosition is
             referrer,
             amountStableDeposit
         );
+        IFlashloanWrapper flw = factory.flw();
         flw.takeOutFlashLoan(tokens.stable, amountStableFlashloan, loanData);
 
         // TODO: Some checks requiring that the positions are what they should be everywhere
         // TODO: Check that the collat ratio is above some value
         // TODO: Do these checks on withdrawLev too
+        emit DepositLev(
+            address(comptroller),
+            address(tokens.pair),
+            amountStableDeposit,
+            amountStableFlashloan,
+            leverageRatio
+        );
     }
 
     function initiateDeposit(
@@ -140,7 +151,10 @@ contract AutoHedgeLeveragedPosition is
         uint256 fee,
         bytes calldata data
     ) external override {
+        // TODO add modifier for only flash loan wrapper
         (
+            uint256 loanType,
+            address lvgPos,
             TokensLev memory tokens,
             uint256 amountVolZapMin,
             IDeltaNeutralStableVolatilePairUpgradeable.UniArgs memory uniArgs,
@@ -149,6 +163,8 @@ contract AutoHedgeLeveragedPosition is
         ) = abi.decode(
                 data,
                 (
+                    uint256,
+                    address,
                     TokensLev,
                     uint256,
                     IDeltaNeutralStableVolatilePairUpgradeable.UniArgs,
@@ -156,6 +172,7 @@ contract AutoHedgeLeveragedPosition is
                     uint256
                 )
             );
+
         // Deposit all stables (except for the flashloan fee) from the user and flashloan to AH
         tokens.pair.deposit(
             amountStableDeposit + amount,
@@ -170,6 +187,7 @@ contract AutoHedgeLeveragedPosition is
         uint256 ahlpBal = IERC20Metadata(address(tokens.pair)).balanceOf(
             address(this)
         );
+        console.log("{}", ahlpBal);
         approveUnapproved(
             address(tokens.cAhlp),
             IERC20Metadata(address(tokens.pair)),
@@ -201,6 +219,8 @@ contract AutoHedgeLeveragedPosition is
                 )
             )
         );
+
+        IFlashloanWrapper flw = factory.flw();
 
         // Repay the flashloan
         approveUnapproved(
@@ -255,6 +275,8 @@ contract AutoHedgeLeveragedPosition is
             amountStableWithdraw,
             amountAhlpRedeem
         );
+
+        IFlashloanWrapper flw = factory.flw();
         flw.takeOutFlashLoan(tokens.stable, amountStableRepay, loanData);
     }
 
@@ -310,6 +332,7 @@ contract AutoHedgeLeveragedPosition is
             amountStablesFromAhlp >= amount + fee + amountStableWithdraw,
             "AHLevPos: not enough withdrawn"
         );
+        IFlashloanWrapper flw = factory.flw();
 
         // Repay the flashloan
         approveUnapproved(address(flw), tokens.stable, amount + fee);
@@ -355,6 +378,7 @@ contract AutoHedgeLeveragedPosition is
     }
 
     function getFeeFactor() external view returns (uint256) {
+        IFlashloanWrapper flw = factory.flw();
         return flw.getFeeFactor();
     }
 }

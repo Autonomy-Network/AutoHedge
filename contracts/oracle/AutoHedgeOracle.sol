@@ -23,6 +23,8 @@ contract AutoHedgeOracle is ICompoundPriceOracle {
 
     address public immutable weth;
 
+    receive() external payable {}
+
     constructor(address _weth) {
         weth = _weth;
     }
@@ -73,25 +75,18 @@ contract AutoHedgeOracle is ICompoundPriceOracle {
         ) = pair.getTokens();
 
         // get the prices of the volatile and the stable
-        uint256 stablePriceInEth = address(stable) == weth
-            ? 1e18
-            : ICompoundBasePriceOracle(msg.sender)
-                .price(address(stable))
-                .mul(1e18)
-                .div(10**uint256(stable.decimals()));
-        uint256 volatilePriceInEth = address(volatile) == weth
-            ? 1e18
-            : ICompoundBasePriceOracle(msg.sender)
-                .price(address(volatile))
-                .mul(1e18)
-                .div(10**uint256(volatile.decimals()));
+        uint256 stablePriceInEth = ICompoundBasePriceOracle(msg.sender).price(
+            address(stable)
+        );
+        uint256 volatilePriceInEth = ICompoundBasePriceOracle(msg.sender).price(
+            address(volatile)
+        );
 
-        uint256 uniLpPriceInEth = address(uniLp) == weth
-            ? 1e18
-            : ICompoundBasePriceOracle(msg.sender)
-                .price(address(uniLp))
-                .mul(1e18)
-                .div(10**uint256(uniLp.decimals()));
+        uint256 uniLpPriceInEth = ICompoundBasePriceOracle(msg.sender).price(
+            address(uniLp)
+        );
+
+        console.log("{}", cVol.accrueInterest());
 
         // convert that to the amounts of stable and volatile the pool owns
         uint256 uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) *
