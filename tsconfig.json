@@ -13,7 +13,7 @@
     "target": "es5",
     "baseUrl": "."
   },
-  "exclude": ["node_modules"],
+  "exclude": ["node_modules", "cache", "artifacts"],
   "include": [
     "artifacts/**/*",
     "artifacts/**/*.json",

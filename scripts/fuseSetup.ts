@@ -11,7 +11,14 @@ import type {
   MasterPriceOracle,
   InitializableClones,
 } from "typechain/thirdparty"
-import { ArtifactType, getEthPrice, snapshot } from "./utils"
+import {
+  ArtifactType,
+  getEthPrice,
+  snapshot,
+  JUMP_RATE_MODEL_ADDR,
+  JUMP_RATE_MODEL_UNI_ADDR,
+  CERC20_IMPLEMENTATION_ADDR,
+} from "./utils"
 
 import WETHAbi from "../thirdparty/WETH.json"
 import DAI from "../thirdparty/DAI.json"
@@ -24,6 +31,7 @@ import UnitrollerAbi from "../thirdparty/Unitroller.json"
 import FuseFeeDistributor from "../thirdparty/FuseFeeDistributor.json"
 
 import ICErc20Abi from "../artifacts/interfaces/ICErc20.sol/ICErc20.json"
+import { formatEther } from "ethers/lib/utils"
 
 const { Interface, parseEther } = ethers.utils
 
@@ -31,9 +39,6 @@ const UNIV2_DAI_ETH_ADDR = "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"
 
 const FUSE_DEFAULT_ORACLE_ADDR = "0x1887118E49e0F4A78Bd71B792a49dE03504A764D"
 const COMPTROLLER_IMPL_ADDR = "0xe16db319d9da7ce40b666dd2e365a4b8b3c18217"
-const JUMP_RATE_MODEL_ADDR = "0xbAB47e4B692195BF064923178A90Ef999A15f819"
-const JUMP_RATE_MODEL_UNI_ADDR = "0xc35DB333EF7ce4F246DE9DE11Cc1929d6AA11672" // noinspection SpellCheckingInspection
-const CERC20_IMPLEMENTATION_ADDR = "0x67Db14E73C2Dce786B5bbBfa4D010dEab4BBFCF9"
 
 let ethPrice
 
@@ -125,7 +130,10 @@ async function deployMarkets() {
   const fuseOracle = await (
     await ethers.getContractFactory("FuseOracle")
   ).deploy()
-  await masterPriceOracle.add([UNIV2_DAI_ETH_ADDR], [fuseOracle.address])
+  await masterPriceOracle.add(
+    [UNIV2_DAI_ETH_ADDR],
+    ["0x50F42c004Bd9B0E5ACc65c33Da133FBFbE86c7C0"]
+  )
   await unitroller._deployMarket(
     false,
     ethers.utils.defaultAbiCoder.encode(constructorTypes, [
@@ -172,7 +180,9 @@ async function deployMarkets() {
     collateralFactorMantissa
   )
 
-  const assets = await fuseLens.getPoolAssetsWithData(unitroller.address)
+  const assets = await fuseLens.callStatic.getPoolAssetsWithData(
+    unitroller.address
+  )
   expect(assets[0]["underlyingSymbol"]).to.equal("DAI-WETH")
   expect(assets[1]["underlyingSymbol"]).to.equal("DAI")
   expect(assets[2]["underlyingSymbol"]).to.equal("WETH")
@@ -198,6 +208,10 @@ async function setupFunds() {
     params: [daiWhaleAddress],
   })
   const daiWhale = await ethers.provider.getSigner(daiWhaleAddress)
+  await dai.transfer(
+    ethers.constants.AddressZero,
+    await dai.balanceOf(owner.address)
+  )
   await dai.connect(daiWhale).transfer(owner.address, amount)
   await dai.connect(daiWhale).transfer(alice.address, amount)
   await dai.connect(daiWhale).transfer(bob.address, amount)
@@ -318,6 +332,11 @@ async function main() {
 
   await setupFunds()
 
+  let daiWhaleAddress = "0xe78388b4ce79068e89bf8aa7f218ef6b9ab0e9d0"
+  const daiWhale = await ethers.provider.getSigner(daiWhaleAddress)
+  await dai.connect(daiWhale).transfer(cStable.address, parseEther("1000000"))
+  console.log(formatEther(await dai.balanceOf(cStable.address)))
+
   const [reg, uff] = await deployAutonomy()
 
   const snapshotId = await snapshot()
@@ -327,6 +346,7 @@ async function main() {
     unitroller: unitroller.address,
     reg: reg.address,
     uff: uff.address,
+    oracle: masterPriceOracle.address,
   }
   fs.writeFileSync("addresses.json", JSON.stringify(addresses))
 
