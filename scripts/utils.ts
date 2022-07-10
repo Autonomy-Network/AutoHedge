@@ -1,10 +1,12 @@
 import fs from "fs"
 import axios from "axios"
 import { expect } from "chai"
-import { BigNumber, ContractInterface } from "ethers"
+import { BigNumber, constants, ContractInterface } from "ethers"
 import { network } from "hardhat"
 
 export const noDeadline = Math.floor(Date.now() / 1000) * 2
+
+export const MINIMUM_LIQUIDITY = 1000
 
 export type ArtifactType = {
   address: string
@@ -16,7 +18,33 @@ export type UnitrollerSnapshot = {
   unitroller: string
   reg: string
   uff: string
+  oracle: string
 }
+
+export const defaultDepositEvent = {
+  amountStable: BigNumber.from(0),
+  amountUniLp: BigNumber.from(0),
+  amountVol: BigNumber.from(0),
+}
+
+export const defaultFlashLoanEvent = {
+  receiver: constants.AddressZero,
+  token: constants.AddressZero,
+  amount: BigNumber.from(0),
+  fee: BigNumber.from(0),
+  loanType: BigNumber.from(0),
+}
+
+export const defaultFlashLoanRepaidEvent = {
+  to: constants.AddressZero,
+  amount: BigNumber.from(0),
+}
+
+export const JUMP_RATE_MODEL_ADDR = "0xbAB47e4B692195BF064923178A90Ef999A15f819"
+export const JUMP_RATE_MODEL_UNI_ADDR =
+  "0xc35DB333EF7ce4F246DE9DE11Cc1929d6AA11672" // noinspection SpellCheckingInspection
+export const CERC20_IMPLEMENTATION_ADDR =
+  "0x67Db14E73C2Dce786B5bbBfa4D010dEab4BBFCF9"
 
 export function getAddresses(): UnitrollerSnapshot {
   // noinspection JSCheckFunctionSignatures
