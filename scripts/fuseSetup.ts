@@ -39,6 +39,7 @@ const UNIV2_DAI_ETH_ADDR = "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"
 
 const FUSE_DEFAULT_ORACLE_ADDR = "0x1887118E49e0F4A78Bd71B792a49dE03504A764D"
 const COMPTROLLER_IMPL_ADDR = "0xe16db319d9da7ce40b666dd2e365a4b8b3c18217"
+const DAI_WHALE_ADDR = "0xe78388b4ce79068e89bf8aa7f218ef6b9ab0e9d0"
 
 let ethPrice
 
@@ -202,12 +203,11 @@ async function setupFunds() {
 
   // get dai
   amount = parseEther("1000000")
-  let daiWhaleAddress = "0xe78388b4ce79068e89bf8aa7f218ef6b9ab0e9d0"
   await hre.network.provider.request({
     method: "hardhat_impersonateAccount",
-    params: [daiWhaleAddress],
+    params: [DAI_WHALE_ADDR],
   })
-  const daiWhale = await ethers.provider.getSigner(daiWhaleAddress)
+  const daiWhale = await ethers.provider.getSigner(DAI_WHALE_ADDR)
   await dai.transfer(
     ethers.constants.AddressZero,
     await dai.balanceOf(owner.address)
@@ -332,10 +332,8 @@ async function main() {
 
   await setupFunds()
 
-  let daiWhaleAddress = "0xe78388b4ce79068e89bf8aa7f218ef6b9ab0e9d0"
-  const daiWhale = await ethers.provider.getSigner(daiWhaleAddress)
+  const daiWhale = await ethers.provider.getSigner(DAI_WHALE_ADDR)
   await dai.connect(daiWhale).transfer(cStable.address, parseEther("1000000"))
-  console.log(formatEther(await dai.balanceOf(cStable.address)))
 
   const [reg, uff] = await deployAutonomy()
 

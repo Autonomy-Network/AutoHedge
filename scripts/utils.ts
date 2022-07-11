@@ -40,6 +40,14 @@ export const defaultFlashLoanRepaidEvent = {
   amount: BigNumber.from(0),
 }
 
+export const defaultWithdrawLevEvent = {
+  pair: constants.AddressZero,
+  amountStableWithdraw: BigNumber.from(0),
+  amountStableFlashloan: BigNumber.from(0),
+  amountAhlpRedeem: BigNumber.from(0),
+  amountStableExcess: BigNumber.from(0),
+}
+
 export const JUMP_RATE_MODEL_ADDR = "0xbAB47e4B692195BF064923178A90Ef999A15f819"
 export const JUMP_RATE_MODEL_UNI_ADDR =
   "0xc35DB333EF7ce4F246DE9DE11Cc1929d6AA11672" // noinspection SpellCheckingInspection

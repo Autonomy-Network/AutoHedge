@@ -27,6 +27,14 @@ interface IAutoHedgeLeveragedPosition {
         uint256 leverageRatio
     );
 
+    event WithdrawLev(
+        address indexed pair,
+        uint256 amountStableWithdraw,
+        uint256 amountStableFlashloan,
+        uint256 amountAhlpRedeem,
+        uint256 amountStableExcess
+    );
+
     function initialize(IAutoHedgeLeveragedPositionFactory factory_) external;
 
     function initiateDeposit(

@@ -69,6 +69,7 @@ contract FlashloanWrapper is
         require(ahLpContract != address(0), "FLW: invalid call data");
 
         emit FlashLoan(ahLpContract, token, amount, fee, uint256(loanType));
+        console.log("{}", uint256(loanType));
 
         if (loanType == FlashLoanTypes.Deposit) {
             IAutoHedgeLeveragedPosition(ahLpContract).initiateDeposit(

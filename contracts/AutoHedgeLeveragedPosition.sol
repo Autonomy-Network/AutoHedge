@@ -187,7 +187,6 @@ contract AutoHedgeLeveragedPosition is
         uint256 ahlpBal = IERC20Metadata(address(tokens.pair)).balanceOf(
             address(this)
         );
-        console.log("{}", ahlpBal);
         approveUnapproved(
             address(tokens.cAhlp),
             IERC20Metadata(address(tokens.pair)),
@@ -273,7 +272,8 @@ contract AutoHedgeLeveragedPosition is
             tokens,
             uniArgs,
             amountStableWithdraw,
-            amountAhlpRedeem
+            amountAhlpRedeem,
+            msg.sender
         );
 
         IFlashloanWrapper flw = factory.flw();
@@ -286,21 +286,29 @@ contract AutoHedgeLeveragedPosition is
         bytes calldata data
     ) external override {
         (
+            uint256 loanType,
+            address lvgPos,
             TokensLev memory tokens,
             IDeltaNeutralStableVolatilePairUpgradeable.UniArgs memory uniArgs,
             uint256 amountStableWithdraw,
-            uint256 amountAhlpRedeem
+            uint256 amountAhlpRedeem,
+            address to
         ) = abi.decode(
                 data,
                 (
+                    uint256,
+                    address,
                     TokensLev,
                     IDeltaNeutralStableVolatilePairUpgradeable.UniArgs,
                     uint256,
-                    uint256
+                    uint256,
+                    address
                 )
             );
+        uint256 loanAmount = amount;
+        uint256 loanFee = fee;
         // Repay borrowed stables in Fuse to free up collat
-        uint256 code = tokens.cStable.repayBorrow(amount);
+        uint256 code = tokens.cStable.repayBorrow(loanAmount);
         require(
             code == 0,
             string(
@@ -310,7 +318,6 @@ contract AutoHedgeLeveragedPosition is
                 )
             )
         );
-
         // Take the AHLP collat out of Fuse/Midas
         code = tokens.cAhlp.redeemUnderlying(amountAhlpRedeem);
         require(
@@ -329,23 +336,34 @@ contract AutoHedgeLeveragedPosition is
             uniArgs
         );
         require(
-            amountStablesFromAhlp >= amount + fee + amountStableWithdraw,
+            amountStablesFromAhlp >=
+                loanAmount + loanFee + amountStableWithdraw,
             "AHLevPos: not enough withdrawn"
         );
         IFlashloanWrapper flw = factory.flw();
 
         // Repay the flashloan
-        approveUnapproved(address(flw), tokens.stable, amount + fee);
+        approveUnapproved(address(flw), tokens.stable, loanAmount + loanFee);
 
-        flw.repayFlashLoan(tokens.stable, amount + fee);
+        flw.repayFlashLoan(tokens.stable, loanAmount + loanFee);
 
         // Use any excess stables to repay debt, keeping good ratio safer than sending to the user
-        tokens.cStable.mint(
-            amountStablesFromAhlp - amount - fee - amountStableWithdraw
-        );
+        uint256 amountStableExcess = amountStablesFromAhlp -
+            loanAmount -
+            loanFee -
+            amountStableWithdraw;
+        tokens.cStable.mint(amountStableExcess);
 
         // Send the user their #madgainz
-        tokens.stable.safeTransfer(msg.sender, amountStableWithdraw);
+        tokens.stable.safeTransfer(to, amountStableWithdraw);
+
+        emit WithdrawLev(
+            address(tokens.pair),
+            amountStableWithdraw,
+            loanAmount,
+            amountAhlpRedeem,
+            amountStableExcess
+        );
     }
 
     // fcns to withdraw tokens incase of liquidation

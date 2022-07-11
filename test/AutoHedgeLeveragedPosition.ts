@@ -34,11 +34,12 @@ import {
   revertSnapshot,
   noDeadline,
   defaultDepositEvent,
-  JUMP_RATE_MODEL_UNI_ADDR,
   CERC20_IMPLEMENTATION_ADDR,
   defaultFlashLoanEvent,
   defaultFlashLoanRepaidEvent,
   MINIMUM_LIQUIDITY,
+  defaultWithdrawLevEvent,
+  equalTol,
 } from "../scripts/utils"
 
 import FusePoolLensAbi from "../thirdparty/FusePoolLens.json"
@@ -59,7 +60,7 @@ const UNIV2_FACTORY_ADDR = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
 const UNIV2_DAI_ETH_ADDR = "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"
 const SUSHI_BENTOBOX_ADDR = "0xF5BCE5077908a1b7370B9ae04AdC565EBd643966"
 
-describe.only("AutoHedgeLeveragedPosition", () => {
+describe("AutoHedgeLeveragedPosition", () => {
   let addresses: UnitrollerSnapshot
 
   let owner: SignerWithAddress
@@ -86,6 +87,7 @@ describe.only("AutoHedgeLeveragedPosition", () => {
   let admin: TProxyAdmin
   let factoryProxy: TProxy
   let pairImpl: DeltaNeutralStableVolatilePairUpgradeable
+  let unitroller: Unitroller
   let comptroller: string
   let levTokens
 
@@ -178,7 +180,7 @@ describe.only("AutoHedgeLeveragedPosition", () => {
     )
     cUniLp = <ICErc20>new ethers.Contract(tokens.cUniLp, ICErc20Abi.abi, owner)
 
-    const unitroller = <Unitroller>(
+    unitroller = <Unitroller>(
       new ethers.Contract(comptroller, UnitrollerAbi.abi, owner)
     )
 
@@ -486,7 +488,7 @@ describe.only("AutoHedgeLeveragedPosition", () => {
     await revertSnapshot(allTimeTestSnapshotId)
   })
 
-  describe("depositLev", () => {
+  describe("depositLev()", () => {
     it("should work as expected", async () => {
       const wethPrice = await getWETHPrice()
       const amountStableDeposit = parseEther(String(1.1 * wethPrice * 2))
@@ -554,6 +556,135 @@ describe.only("AutoHedgeLeveragedPosition", () => {
       )
       // TODO do we need to make referrer fee as cToken?
       expect(await pair.balanceOf(feeReceiver.address)).to.equal(liquidityFee)
+    })
+  })
+
+  describe("withdrawLev()", () => {
+    it.only("should work as expected", async () => {
+      const wethPrice = await getWETHPrice()
+      const amountStableDeposit = parseEther(String(1.1 * wethPrice * 2))
+      const amountVolZapMin = 0
+      // 5x leverage
+      const leverageRatio = parseEther("5")
+
+      const ahDepositFee = await factory.depositFee()
+      const ahConvRate = TEN_18.sub(ahDepositFee)
+      const b = ahConvRate.mul(leverageRatio.sub(TEN_18)).div(leverageRatio)
+      const c = TEN_18.mul(FLASH_LOAN_FEE_PRECISION - FLASH_LOAN_FEE).div(
+        FLASH_LOAN_FEE_PRECISION
+      )
+      const amountStableFlashloan = amountStableDeposit.mul(b).div(c.sub(b))
+      const amountToDepositToAH = amountStableDeposit.add(amountStableFlashloan)
+      const { amountVolEstimated, amountStableEstimated } =
+        await estimateDeposit(amountToDepositToAH)
+
+      const tokens = await pair.tokens()
+
+      let tx = await ahlp.depositLev(
+        comptroller,
+        {
+          ...tokens,
+          pair: pair.address,
+          cAhlp: cAhlp.address,
+        },
+        amountVolZapMin,
+        {
+          amountStableMin: 0,
+          amountVolMin: 0,
+          deadline: noDeadline,
+          pathStableToVol: [dai.address, weth.address],
+          pathVolToStable: [weth.address, dai.address],
+          swapAmountOutMin: 0,
+        },
+        constants.AddressZero,
+        amountStableDeposit,
+        amountStableFlashloan,
+        leverageRatio
+      )
+      let receipt = await tx.wait()
+
+      const { amount: flashLoanAmount, fee: flashLoanFee } =
+        getFlashLoanEvent(receipt)
+      const { amount: flashLoanRepaidAmount } = getFlashLoanRepaidEvent(receipt)
+
+      const totalLoan = flashLoanAmount.add(flashLoanFee)
+
+      expect(flashLoanAmount).to.equal(amountStableFlashloan)
+      expect(flashLoanRepaidAmount).to.equal(totalLoan)
+
+      const { amountStable, amountVol } = getDepositEvent(receipt)
+
+      expect(amountVol).to.equal(amountVolEstimated)
+      expect(amountStable).to.equal(amountStableEstimated)
+
+      const liquidity = (await mockSqrt.sqrt(amountVol.mul(amountStable))).sub(
+        MINIMUM_LIQUIDITY
+      )
+      const liquidityFee = liquidity.mul(await factory.depositFee()).div(TEN_18)
+      // Check if cAhlp token balance is correct
+      expect(await cAhlp.callStatic.balanceOfUnderlying(ahlp.address)).to.equal(
+        liquidity.sub(liquidityFee)
+      )
+      // TODO do we need to make referrer fee as cToken?
+      expect(await pair.balanceOf(feeReceiver.address)).to.equal(liquidityFee)
+
+      const amountAhlp = await cAhlp.callStatic.balanceOfUnderlying(
+        ahlp.address
+      )
+      const amountAhlpRedeem = amountAhlp.div(3)
+      const amountStableWithdraw = parseEther("1000")
+      const amountStableRepay = amountStableWithdraw
+        .mul(leverageRatio)
+        .div(TEN_18)
+        .mul(FLASH_LOAN_FEE_PRECISION)
+        .div(FLASH_LOAN_FEE_PRECISION - FLASH_LOAN_FEE)
+
+      const amountStableInLPBefore =
+        await cStable.callStatic.balanceOfUnderlying(ahlp.address)
+      const daiBalanceBefore = await dai.balanceOf(owner.address)
+
+      tx = await ahlp.withdrawLev(
+        {
+          ...tokens,
+          pair: pair.address,
+          cAhlp: cAhlp.address,
+        },
+        {
+          amountStableMin: 0,
+          amountVolMin: 0,
+          deadline: noDeadline,
+          pathStableToVol: [dai.address, weth.address],
+          pathVolToStable: [weth.address, dai.address],
+          swapAmountOutMin: 0,
+        },
+        amountStableWithdraw,
+        amountStableRepay,
+        amountAhlpRedeem,
+        leverageRatio
+      )
+      receipt = await tx.wait()
+
+      const withdrawLevEvent = receipt.events?.find(
+        ({ event }) => event === "WithdrawLev"
+      )
+      const withdrawLevArgs = withdrawLevEvent
+        ? withdrawLevEvent.args
+        : defaultWithdrawLevEvent
+
+      expect(await cAhlp.callStatic.balanceOfUnderlying(ahlp.address)).to.equal(
+        amountAhlp.sub(amountAhlpRedeem)
+      )
+      expect(await dai.balanceOf(owner.address)).to.equal(
+        daiBalanceBefore.add(amountStableWithdraw)
+      )
+      if (withdrawLevArgs?.amountStableExcess.gt(0)) {
+        const amountStableInLPAfter =
+          await cStable.callStatic.balanceOfUnderlying(ahlp.address)
+        equalTol(
+          amountStableInLPAfter,
+          amountStableInLPBefore.add(withdrawLevArgs.amountStableExcess)
+        )
+      }
     })
   })
 })
