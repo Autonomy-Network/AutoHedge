@@ -59,7 +59,8 @@ interface IDeltaNeutralStableVolatilePairUpgradeable {
         address userFeeVeriForwarder_,
         MmBps memory mmBps_,
         IComptroller _comptroller,
-        IDeltaNeutralStableVolatileFactoryUpgradeable factory_
+        IDeltaNeutralStableVolatileFactoryUpgradeable factory_,
+        address wethWithdrawer_
     ) external;
     
     /**

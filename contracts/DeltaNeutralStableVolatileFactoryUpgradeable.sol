@@ -10,6 +10,7 @@ import "../interfaces/IERC20Symbol.sol";
 import "../interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IComptroller.sol";
+import "../interfaces/IWethWithdrawer.sol";
 
 import "hardhat/console.sol";
 
@@ -29,6 +30,7 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
     IDeltaNeutralStableVolatilePairUpgradeable.MmBps initMmBps;
     address public override feeReceiver;
     uint public override depositFee;
+    address public override wethWithdrawer;
 
     function initialize(
         address beacon_,
@@ -39,7 +41,8 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
         address payable registry_,
         address userFeeVeriForwarder_,
         IDeltaNeutralStableVolatilePairUpgradeable.MmBps memory initMmBps_,
-        address feeReceiver_
+        address feeReceiver_,
+        address wethWithdrawer_
     ) public override initializer {
         __Ownable_init_unchained();
 
@@ -54,6 +57,7 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
         feeReceiver = feeReceiver_;
         // initial deposit fee is 0.3%
         depositFee = 3e15;
+        wethWithdrawer = wethWithdrawer_;
 
         emit FeeReceiverSet(feeReceiver);
         emit DepositFeeSet(depositFee);
@@ -100,7 +104,8 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
             userFeeVeriForwarder,
             initMmBps,
             comptroller,
-            address(this)
+            address(this),
+            wethWithdrawer
         );
         console.logBytes(data); // Need to know the inputs to the constructor to verify the source code
         pair = address(new BeaconProxy{salt: salt}(beacon, data));

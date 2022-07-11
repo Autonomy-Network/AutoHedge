@@ -22,7 +22,8 @@ interface IDeltaNeutralStableVolatileFactoryUpgradeable {
         address payable registry_,
         address userFeeVeriForwarder_,
         IDeltaNeutralStableVolatilePairUpgradeable.MmBps memory initMmBps_,
-        address feeReceiver_
+        address feeReceiver_,
+        address wethWithdrawer_
     ) external;
 
     function getPair(IERC20Metadata stable, IERC20Metadata vol) external view returns (address pair);
@@ -40,4 +41,5 @@ interface IDeltaNeutralStableVolatileFactoryUpgradeable {
     function userFeeVeriForwarder() external view returns (address);
     function feeReceiver() external view returns (address);
     function depositFee() external view returns (uint);
+    function wethWithdrawer() external view returns (address);
 }

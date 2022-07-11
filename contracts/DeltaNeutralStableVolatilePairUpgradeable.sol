@@ -15,6 +15,7 @@ import "../interfaces/IDeltaNeutralStableVolatilePairUpgradeable.sol";
 import "../interfaces/IDeltaNeutralStableVolatileFactoryUpgradeable.sol";
 import "../interfaces/IWETH.sol";
 import "../interfaces/autonomy/IRegistry.sol";
+import "../interfaces/IWethWithdrawer.sol";
 import "./UniswapV2ERC20Upgradeable.sol";
 import "./Maths.sol";
 
@@ -47,7 +48,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         address userFeeVeriForwarder_,
         MmBps memory mmBps_,
         IComptroller _comptroller,
-        IDeltaNeutralStableVolatileFactoryUpgradeable factory_
+        IDeltaNeutralStableVolatileFactoryUpgradeable factory_,
+        address wethWithdrawer_
     ) public override initializer {
         __Ownable_init_unchained();
         __UniswapV2ERC20Upgradeable__init_unchained(name_, symbol_);
@@ -59,6 +61,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
         userFeeVeriForwarder = userFeeVeriForwarder_;
         mmBps = mmBps_;
         factory = factory_;
+        wethWithdrawer = wethWithdrawer_;
 
         tokens_.stable.safeApprove(address(uniV2Router), MAX_UINT);
         tokens_.stable.safeApprove(address(tokens_.cStable), MAX_UINT);
@@ -102,6 +105,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
     MmBps public mmBps;
 
     IDeltaNeutralStableVolatileFactoryUpgradeable public override factory;
+    address public wethWithdrawer;
 
 
     function deposit(
@@ -398,7 +402,8 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
 
                 // Pay `feeAmount`
                 if (feeAmount > 0 && !payFeeFromBal) {
-                    IWETH(address(weth)).withdraw(feeAmount);
+                    IWETH(address(weth)).transfer(wethWithdrawer, feeAmount);
+                    IWethWithdrawer(wethWithdrawer_).withdraw(payable(address(this)));
                 }
             } else {
                 uint amountStableForDebt = uniV2Router.getAmountsIn(amountVolToRepay, pathStableToVol)[0];
