@@ -192,7 +192,7 @@ async function setupFunds() {
 
   // get dai
   amount = parseEther("1000000")
-  let daiWhaleAddress = "0xe78388b4ce79068e89bf8aa7f218ef6b9ab0e9d0"
+  let daiWhaleAddress = "0x8EB8a3b98659Cce290402893d0123abb75E3ab28"
   await hre.network.provider.request({
     method: "hardhat_impersonateAccount",
     params: [daiWhaleAddress],
@@ -255,7 +255,7 @@ async function deployAutonomy() {
 }
 
 async function main() {
-  [owner, bob, alice, priceCoordinator] = await ethers.getSigners()
+  ;[owner, bob, alice, priceCoordinator] = await ethers.getSigners()
 
   let fuseAdminAddr = "0x5eA4A9a7592683bF0Bc187d6Da706c6c4770976F"
   await owner.sendTransaction({
