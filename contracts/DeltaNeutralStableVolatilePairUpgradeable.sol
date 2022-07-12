@@ -403,7 +403,7 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
                 // Pay `feeAmount`
                 if (feeAmount > 0 && !payFeeFromBal) {
                     IWETH(address(weth)).transfer(wethWithdrawer, feeAmount);
-                    IWethWithdrawer(wethWithdrawer_).withdraw(payable(address(this)));
+                    IWethWithdrawer(wethWithdrawer).withdraw(payable(address(this)));
                 }
             } else {
                 uint amountStableForDebt = uniV2Router.getAmountsIn(amountVolToRepay, pathStableToVol)[0];
@@ -543,6 +543,10 @@ contract DeltaNeutralStableVolatilePairUpgradeable is IDeltaNeutralStableVolatil
             _tokens.uniLp,
             _tokens.cUniLp
         );
+    }
+
+    function setWethWithdrawer(address _wethWithdrawer) external {
+        wethWithdrawer = _wethWithdrawer;
     }
 
     receive() external payable {}
