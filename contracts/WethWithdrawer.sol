@@ -7,6 +7,8 @@ import "hardhat/console.sol";
 contract WethWithdrawer {
   address public weth;
 
+  receive() external payable {}
+
   constructor(address weth_) {
     weth = weth_;
   }
