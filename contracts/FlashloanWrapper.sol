@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 import "../interfaces/IFlashloanWrapper.sol";
+import "../interfaces/IFinisher.sol";
 import "../interfaces/IAutoHedgeLeveragedPosition.sol";
 
 import "hardhat/console.sol";
@@ -24,11 +25,6 @@ contract FlashloanWrapper is
 
     using SafeERC20 for IERC20;
 
-    enum FlashLoanTypes {
-        Deposit,
-        Withdraw
-    }
-
     IBentoBox public override sushiBentoBox;
 
     function takeOutFlashLoan(
@@ -36,6 +32,11 @@ contract FlashloanWrapper is
         uint256 amount,
         bytes calldata data
     ) external override {
+        // Guarantee that the 1st argument of the forwarded callData
+        // is the caller of this fcn
+        (FinishRoute fr) = abi.decode(data[:32], (FinishRoute));
+        require(fr.flwCaller == msg.sender);
+
         sushiBentoBox.flashLoan(
             IFlashBorrower(address(this)),
             msg.sender,
@@ -49,6 +50,43 @@ contract FlashloanWrapper is
         return 0;
     }
 
+    // function onFlashLoan(
+    //     address sender,
+    //     IERC20 token,
+    //     uint256 amount,
+    //     uint256 fee,
+    //     bytes calldata data
+    // ) external override {
+    //     require(msg.sender == address(sushiBentoBox), "FLW: invalid caller");
+    //     (FlashLoanTypes loanType, address ahLpContract) = abi.decode(
+    //         data[:64],
+    //         (FlashLoanTypes, address)
+    //     );
+    //     // Should just use a `isDeposit` bool instead, could remove this check
+    //     require(
+    //         loanType == FlashLoanTypes.Deposit ||
+    //             loanType == FlashLoanTypes.Withdraw,
+    //         "FLW: invalid loan type"
+    //     );
+    //     require(ahLpContract != address(0), "FLW: invalid call data");
+
+    //     emit FlashLoan(ahLpContract, token, amount, fee, uint256(loanType));
+
+    //     if (loanType == FlashLoanTypes.Deposit) {
+    //         IAutoHedgeLeveragedPosition(ahLpContract).initiateDeposit(
+    //             amount,
+    //             fee,
+    //             data
+    //         );
+    //     } else {
+    //         IAutoHedgeLeveragedPosition(ahLpContract).initiateWithdraw(
+    //             amount,
+    //             fee,
+    //             data
+    //         );
+    //     }
+    // }
+
     function onFlashLoan(
         address sender,
         IERC20 token,
@@ -57,38 +95,16 @@ contract FlashloanWrapper is
         bytes calldata data
     ) external override {
         require(msg.sender == address(sushiBentoBox), "FLW: invalid caller");
-        (FlashLoanTypes loanType, address ahLpContract) = abi.decode(
-            data[:64],
-            (FlashLoanTypes, address)
-        );
-        require(
-            loanType == FlashLoanTypes.Deposit ||
-                loanType == FlashLoanTypes.Withdraw,
-            "FLW: invalid loan type"
-        );
-        require(ahLpContract != address(0), "FLW: invalid call data");
-
-        emit FlashLoan(ahLpContract, token, amount, fee, uint256(loanType));
-
-        if (loanType == FlashLoanTypes.Deposit) {
-            IAutoHedgeLeveragedPosition(ahLpContract).initiateDeposit(
-                amount,
-                fee,
-                data
-            );
-        } else {
-            IAutoHedgeLeveragedPosition(ahLpContract).initiateWithdraw(
-                amount,
-                fee,
-                data
-            );
-        }
+        require(sender == address(this), "FLW: invalid sender");
+        
+        (FinishRoute fr) = abi.decode(data[32:64], (FinishRoute));
+        IFlwReceiver(fr.target).onFlw(fee, data);
     }
 
-    function repayFlashLoan(IERC20 token, uint256 amount) external override {
-        token.safeTransferFrom(msg.sender, address(sushiBentoBox), amount);
-        emit FlashLoanRepaid(address(sushiBentoBox), amount);
-    }
+    // function repayFlashLoan(IERC20 token, uint256 amount) external override {
+    //     token.safeTransferFrom(msg.sender, address(sushiBentoBox), amount);
+    //     emit FlashLoanRepaid(address(sushiBentoBox), amount);
+    // }
 
     function _authorizeUpgrade(address) internal override onlyOwner {}
 }

@@ -99,6 +99,7 @@ contract AutoHedgeLeveragedPosition is
         require(amountStableFlashloan > 0, "AHLevPos: total less than init");
 
         // Enter the relevant markets on Fuse/Midas
+        // TODO: check depositing twice because this may fail if already in the markets
         address[] memory cTokens = new address[](2);
         cTokens[0] = address(tokens.cStable);
         cTokens[1] = address(tokens.cAhlp);
@@ -161,17 +162,17 @@ contract AutoHedgeLeveragedPosition is
             address referrer,
             uint256 amountStableDeposit
         ) = abi.decode(
-                data,
-                (
-                    uint256,
-                    address,
-                    TokensLev,
-                    uint256,
-                    IDeltaNeutralStableVolatilePairUpgradeable.UniArgs,
-                    address,
-                    uint256
-                )
-            );
+            data,
+            (
+                uint256,
+                address,
+                TokensLev,
+                uint256,
+                IDeltaNeutralStableVolatilePairUpgradeable.UniArgs,
+                address,
+                uint256
+            )
+        );
 
         // Deposit all stables (except for the flashloan fee) from the user and flashloan to AH
         tokens.pair.deposit(

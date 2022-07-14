@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./IBentoBox.sol";
 
 interface IFlashloanWrapper {
-    event FlashLoan(
+    event Flashloan(
         address indexed receiver,
         IERC20 token,
         uint256 amount,
@@ -13,7 +13,18 @@ interface IFlashloanWrapper {
         uint256 loanType
     );
 
-    event FlashLoanRepaid(address indexed to, uint256 amount);
+    event FlashloanRepaid(address indexed to, uint256 amount);
+
+    enum FlashloanType {
+        Deposit,
+        Withdraw
+    }
+
+    struct FinishRoute {
+        address flwCaller;
+        address target;
+        FlashloanType flt;
+    }
 
     function takeOutFlashLoan(
         IERC20 token,
@@ -24,6 +35,4 @@ interface IFlashloanWrapper {
     function getFeeFactor() external view returns (uint256);
 
     function sushiBentoBox() external view returns (IBentoBox);
-
-    function repayFlashLoan(IERC20 token, uint256 amount) external;
 }
