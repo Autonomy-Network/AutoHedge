@@ -309,6 +309,7 @@ contract AutoHedgeLeveragedPosition is
         uint256 loanFee = fee;
         // Repay borrowed stables in Fuse to free up collat
         uint256 code = tokens.cStable.repayBorrow(loanAmount);
+        console.log("Loan amount: {}", loanAmount);
         require(
             code == 0,
             string(
@@ -335,6 +336,7 @@ contract AutoHedgeLeveragedPosition is
             amountAhlpRedeem,
             uniArgs
         );
+        console.log("Amount Stables From AHLP: {}", amountStablesFromAhlp);
         require(
             amountStablesFromAhlp >=
                 loanAmount + loanFee + amountStableWithdraw,
@@ -399,4 +401,6 @@ contract AutoHedgeLeveragedPosition is
         IFlashloanWrapper flw = factory.flw();
         return flw.getFeeFactor();
     }
+
+    receive() external payable {}
 }

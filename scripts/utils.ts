@@ -1,8 +1,8 @@
 import fs from "fs"
 import axios from "axios"
 import { expect } from "chai"
-import { BigNumber, constants, ContractInterface } from "ethers"
-import { network } from "hardhat"
+import { BigNumber, constants, ContractInterface, Signer } from "ethers"
+import { network, ethers } from "hardhat"
 
 export const noDeadline = Math.floor(Date.now() / 1000) * 2
 
@@ -74,8 +74,8 @@ const RES_TOL_UPPER = 1000010
 const RES_TOL_TOTAL = 1000000
 
 export function equalTol(a: BigNumber, b: BigNumber) {
-  expect(a).gt(b.mul(RES_TOL_LOWER).div(RES_TOL_TOTAL))
-  expect(a).lt(b.mul(RES_TOL_UPPER).div(RES_TOL_TOTAL))
+  expect(a).gte(b.mul(RES_TOL_LOWER).div(RES_TOL_TOTAL))
+  expect(a).lte(b.mul(RES_TOL_UPPER).div(RES_TOL_TOTAL))
 }
 
 export async function snapshot(): Promise<string> {
@@ -101,4 +101,12 @@ export async function revertAndSnapshot(id: string): Promise<string> {
 
 export async function increaseTime(time: number) {
   await network.provider.send("evm_increaseTime", [time])
+}
+
+export async function impersonateAccount(address: string): Promise<Signer> {
+  await network.provider.request({
+    method: "hardhat_impersonateAccount",
+    params: [address],
+  })
+  return await ethers.getSigner(address)
 }
