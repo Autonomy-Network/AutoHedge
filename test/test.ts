@@ -1299,7 +1299,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     })
   })
 
-  describe.only("rebalance()", () => {
+  describe("rebalance()", () => {
     it("Should rebalance, borrow more ETH, no fee", async () => {
       const amountStableInit = parseEther(String(1.1 * ethPrice * 2)) // fuse min borrow amount is 1 ETH, and half is kept as DAI
       const amountVolZapMin = parseEther("1")
