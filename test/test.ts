@@ -103,6 +103,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
 
   const TEN_18 = parseEther("1")
 
+  let userFeeVeriForwarder: SignerWithAddress;
+
   async function getWETHPrice() {
     return +formatEther(
       (
@@ -280,6 +282,8 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     await dai.approve(pair.address, constants.MaxUint256)
     await dai.connect(bob).approve(pair.address, constants.MaxUint256)
     await dai.connect(alice).approve(pair.address, constants.MaxUint256)
+
+    userFeeVeriForwarder = await impersonateAccountAndFundETH(await pair.userFeeVeriForwarder())
   })
 
   // Want to reset to the state just after fuseDeploy
@@ -1295,7 +1299,7 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
     })
   })
 
-  describe("rebalance()", () => {
+  describe.only("rebalance()", () => {
     it("Should rebalance, borrow more ETH, no fee", async () => {
       const amountStableInit = parseEther(String(1.1 * ethPrice * 2)) // fuse min borrow amount is 1 ETH, and half is kept as DAI
       const amountVolZapMin = parseEther("1")
@@ -1601,7 +1605,6 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const estStableFromVolFee = (await uniV2Router.getAmountsIn(feeAmount, [dai.address, weth.address]))[0]
       await revertSnapshot(testSnapshotId3)
 
-      const userFeeVeriForwarder = await impersonateAccountAndFundETH(await pair.userFeeVeriForwarder())
       await pair.connect(userFeeVeriForwarder).rebalanceAuto(pair.address, feeAmount)
 
       // factory, pair, cTokens, owner
@@ -1778,7 +1781,6 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
         value: amountVolOwned.sub(amountVolDebt)
       })
 
-      const userFeeVeriForwarder = await impersonateAccountAndFundETH(await pair.userFeeVeriForwarder())
       await pair.connect(userFeeVeriForwarder).rebalanceAuto(pair.address, feeAmount)
 
       // factory, pair, cTokens, owner
@@ -1951,7 +1953,6 @@ describe("DeltaNeutralStableVolatilePairUpgradeable", () => {
       const feeAmount = (amountVolDebt.sub(amountVolOwned)).mul(30).div(100);
       const estStableFromVol = (await uniV2Router.getAmountsIn(amountVolDebt.sub(amountVolOwned).add(feeAmount), [dai.address, weth.address]))[0]
 
-      const userFeeVeriForwarder = await impersonateAccountAndFundETH(await pair.userFeeVeriForwarder())
       await pair.connect(userFeeVeriForwarder).rebalanceAuto(pair.address, feeAmount)
 
       // factory, pair, cTokens, owner
