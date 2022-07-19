@@ -86,8 +86,6 @@ contract AutoHedgeOracle is ICompoundPriceOracle {
             address(uniLp)
         );
 
-        console.log("{}", cVol.accrueInterest());
-
         // convert that to the amounts of stable and volatile the pool owns
         uint256 uniLpValueInEth = cUniLp.balanceOfUnderlying(address(pair)) *
             uniLpPriceInEth;

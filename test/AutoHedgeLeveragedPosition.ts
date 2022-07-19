@@ -190,7 +190,7 @@ describe("AutoHedgeLeveragedPosition", () => {
     )
     // TODO make a separate Price Oracle for AHLP
     const ahOracle = await (
-      await ethers.getContractFactory("AutoHedgeDummyOracle")
+      await ethers.getContractFactory("AutoHedgeOracle")
     ).deploy(weth.address)
     await owner.sendTransaction({
       value: parseEther("10"),

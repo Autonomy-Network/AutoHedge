@@ -1,0 +1,13 @@
+[default]
+src = 'contracts'
+out = 'abi'
+libs = ['lib']
+remappings = [
+  'ds-test/=lib/forge-std/lib/ds-test/src/',
+  'forge-std/=lib/forge-std/src/',
+  'hardhat/=node_modules/hardhat/',
+  '@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/',
+  '@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/'
+]
+
+# See more config options https://github.com/foundry-rs/foundry/tree/master/config

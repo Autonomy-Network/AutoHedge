@@ -11,12 +11,14 @@ import "../interfaces/IUniswapV2Factory.sol";
 import "../interfaces/IUniswapV2Router02.sol";
 import "../interfaces/IComptroller.sol";
 
-import "hardhat/console.sol";
-
-
-contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVolatileFactoryUpgradeable, Initializable, OwnableUpgradeable {
-
-    mapping(IERC20Metadata => mapping(IERC20Metadata => address)) public override getPair;
+contract DeltaNeutralStableVolatileFactoryUpgradeable is
+    IDeltaNeutralStableVolatileFactoryUpgradeable,
+    Initializable,
+    OwnableUpgradeable
+{
+    mapping(IERC20Metadata => mapping(IERC20Metadata => address))
+        public
+        override getPair;
     address[] private _allPairs;
 
     address public beacon;
@@ -28,7 +30,7 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
     address public override userFeeVeriForwarder;
     IDeltaNeutralStableVolatilePairUpgradeable.MmBps initMmBps;
     address public override feeReceiver;
-    uint public override depositFee;
+    uint256 public override depositFee;
 
     function initialize(
         address beacon_,
@@ -59,19 +61,23 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
         emit DepositFeeSet(depositFee);
     }
 
-    function allPairs(uint index) external override view returns (address) {
+    function allPairs(uint256 index) external view override returns (address) {
         return _allPairs[index];
     }
 
-    function allPairsLength() external override view returns (uint) {
+    function allPairsLength() external view override returns (uint256) {
         return _allPairs.length;
     }
 
-    function createPair(IERC20Metadata stable, IERC20Metadata vol) external override returns (address pair) {
-        require(stable != vol, 'DNFac: addresses are the same');
-        require(stable != IERC20Metadata(address(0)), 'DNFac: zero address');
-        require(vol != IERC20Metadata(address(0)), 'DNFac: zero address');
-        require(getPair[stable][vol] == address(0), 'DNFac: pair exists'); // single check is sufficient
+    function createPair(IERC20Metadata stable, IERC20Metadata vol)
+        external
+        override
+        returns (address pair)
+    {
+        require(stable != vol, "DNFac: addresses are the same");
+        require(stable != IERC20Metadata(address(0)), "DNFac: zero address");
+        require(vol != IERC20Metadata(address(0)), "DNFac: zero address");
+        require(getPair[stable][vol] == address(0), "DNFac: pair exists"); // single check is sufficient
 
         // Create the pair
         bytes32 salt = keccak256(abi.encodePacked(stable, vol));
@@ -80,21 +86,24 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
 
         IComptroller _comptroller = comptroller; // Gas savings
         address uniLp = uniV2Factory.getPair(address(stable), address(vol));
-        IDeltaNeutralStableVolatilePairUpgradeable.Tokens memory tokens = IDeltaNeutralStableVolatilePairUpgradeable.Tokens(
-            stable,
-            ICErc20(_comptroller.cTokensByUnderlying(address(stable))),
-            vol,
-            ICErc20(_comptroller.cTokensByUnderlying(address(vol))),
-            IERC20Metadata(uniLp),
-            ICErc20(_comptroller.cTokensByUnderlying(address(uniLp)))
-        );
+        IDeltaNeutralStableVolatilePairUpgradeable.Tokens
+            memory tokens = IDeltaNeutralStableVolatilePairUpgradeable.Tokens(
+                stable,
+                ICErc20(_comptroller.cTokensByUnderlying(address(stable))),
+                vol,
+                ICErc20(_comptroller.cTokensByUnderlying(address(vol))),
+                IERC20Metadata(uniLp),
+                ICErc20(_comptroller.cTokensByUnderlying(address(uniLp)))
+            );
 
         bytes memory data = abi.encodeWithSelector(
             IDeltaNeutralStableVolatilePairUpgradeable.initialize.selector,
             uniV2Router,
             tokens,
             weth,
-            string(abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)),
+            string(
+                abi.encodePacked("AutoHedge-", token0Symbol, "-", token1Symbol)
+            ),
             string(abi.encodePacked("AH-", token0Symbol, "-", token1Symbol)),
             registry,
             userFeeVeriForwarder,
@@ -102,7 +111,7 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
             comptroller,
             address(this)
         );
-        console.logBytes(data); // Need to know the inputs to the constructor to verify the source code
+
         pair = address(new BeaconProxy{salt: salt}(beacon, data));
         OwnableUpgradeable(pair).transferOwnership(owner());
         // Housekeeping
@@ -123,8 +132,11 @@ contract DeltaNeutralStableVolatileFactoryUpgradeable is IDeltaNeutralStableVola
         emit FeeReceiverSet(feeReceiver);
     }
 
-    function setDepositFee(uint newDepositFee) external override onlyOwner {
-        require(newDepositFee > 0 && newDepositFee < 1 ether, "DNFac: invalid deposit fee");
+    function setDepositFee(uint256 newDepositFee) external override onlyOwner {
+        require(
+            newDepositFee > 0 && newDepositFee < 1 ether,
+            "DNFac: invalid deposit fee"
+        );
         depositFee = newDepositFee;
         emit DepositFeeSet(depositFee);
     }

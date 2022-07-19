@@ -1,41 +1,38 @@
 pragma solidity 0.8.6;
 
-
+import "@openzeppelin/contracts/token/ERC777/IERC777.sol";
 import "./IOracle.sol";
 
-
 /**
-* @title    StakeManager
-* @notice   A lightweight Proof of Stake contract that allows
-*           staking of AUTO tokens. Instead of a miner winning
-*           the ability to produce a block, the algorithm selects
-*           a staker for a period of 100 blocks to be the executor.
-*           the executor has the exclusive right to execute requests
-*           in the Registry contract. The Registry checks with StakeManager
-*           who is allowed to execute requests at any given time
-* @author   Quantaf1re (James Key)
-*/
+ * @title    StakeManager
+ * @notice   A lightweight Proof of Stake contract that allows
+ *           staking of AUTO tokens. Instead of a miner winning
+ *           the ability to produce a block, the algorithm selects
+ *           a staker for a period of 100 blocks to be the executor.
+ *           the executor has the exclusive right to execute requests
+ *           in the Registry contract. The Registry checks with StakeManager
+ *           who is allowed to execute requests at any given time
+ * @author   Quantaf1re (James Key)
+ */
 interface IStakeManager {
-
-    struct Executor{
+    struct Executor {
         address addr;
         uint96 forEpoch;
     }
-
 
     //////////////////////////////////////////////////////////////
     //                                                          //
     //                          Getters                         //
     //                                                          //
     //////////////////////////////////////////////////////////////
-    
+
     function getOracle() external view returns (IOracle);
 
     function getAUTOAddr() external view returns (address);
 
-    function getTotalStaked() external view returns (uint);
+    function getTotalStaked() external view returns (uint256);
 
-    function getStake(address staker) external view returns (uint);
+    function getStake(address staker) external view returns (uint256);
 
     /**
      * @notice  Returns the array of stakes. Every element in the array represents
@@ -47,7 +44,7 @@ interface IStakeManager {
     /**
      * @notice  The length of `_stakes`, i.e. the total staked when multiplied by `STAN_STAKE`
      */
-    function getStakesLength() external view returns (uint);
+    function getStakesLength() external view returns (uint256);
 
     /**
      * @notice  The same as getStakes except it returns only part of the array - the
@@ -57,7 +54,10 @@ interface IStakeManager {
      * @param startIdx  [uint] The starting index from which to start getting the slice (inclusive)
      * @param endIdx    [uint] The ending index from which to start getting the slice (exclusive)
      */
-    function getStakesSlice(uint startIdx, uint endIdx) external view returns (address[] memory);
+    function getStakesSlice(uint256 startIdx, uint256 endIdx)
+        external
+        view
+        returns (address[] memory);
 
     /**
      * @notice  Returns the current epoch. Goes in increments of 100. E.g. the epoch
@@ -87,7 +87,15 @@ interface IStakeManager {
      *          is for a previous epoch, and there is some stake in the system. If the executor
      *          can't be updated currently, then everything execpt `epoch` will return 0
      */
-    function getUpdatedExecRes() external view returns (uint96 epoch, uint randNum, uint idxOfExecutor, address exec);
+    function getUpdatedExecRes()
+        external
+        view
+        returns (
+            uint96 epoch,
+            uint256 randNum,
+            uint256 idxOfExecutor,
+            address exec
+        );
 
     //////////////////////////////////////////////////////////////
     //                                                          //
@@ -101,7 +109,14 @@ interface IStakeManager {
      * @return  Returns the relevant variables for determining the new executor if the executor
      *          can be updated currently
      */
-    function updateExecutor() external returns (uint, uint, uint, address);
+    function updateExecutor()
+        external
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            address
+        );
 
     /**
      * @notice  Checks if the stored executor is for the current epoch - if it is,
@@ -137,7 +152,7 @@ interface IStakeManager {
      * @param numStakes  [uint] The number of `STAN_STAKE` to stake and therefore how many
      *          slots in the array to add the user to
      */
-    function stake(uint numStakes) external;
+    function stake(uint256 numStakes) external;
 
     /**
      * @notice  Unstake AUTO tokens. Calling this will first try and set the executor so that
@@ -157,5 +172,7 @@ interface IStakeManager {
      *              take account of this behaviour - that way you can just use indexes
      *              as they are already without alterations
      */
-    function unstake(uint[] calldata idxs) external;
+    function unstake(uint256[] calldata idxs) external;
+
+    function setAUTO(IERC777 AUTO) external;
 }

@@ -17,8 +17,6 @@ import "../interfaces/autonomy/IRegistry.sol";
 import "./UniswapV2ERC20Upgradeable.sol";
 import "./Maths.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title    AutoHedgeStableVolatilePair
  * @notice   AutoHedge allows users to LP on DEXes while remaining

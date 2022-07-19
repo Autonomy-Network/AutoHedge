@@ -13,3 +13,7 @@ artifacts
 .vscode/
 
 addresses.json
+
+# Foundry files
+lib/
+abi/
